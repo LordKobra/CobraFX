@@ -1,2 +1,2 @@
 # CobraFX
-ReShade Shaders.
+My shaders for ReShade are saved here.
