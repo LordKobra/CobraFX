@@ -1,2 +1,2 @@
 # CobraFX
-ReShade Shader
+ReShade Shaders.
