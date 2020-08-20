@@ -18,7 +18,7 @@
 uniform float GravityIntensity <
 	ui_type = "drag";
 ui_min = 0.000; ui_max = 1.000;
-ui_step = 0.001;
+ui_step = 0.01;
 ui_tooltip = "Gravity strength. Higher values look cooler but increase the computation time by a lot!";
 > = 0.5;
 uniform float GravityRNG <
@@ -91,7 +91,7 @@ texture texGravitySeedMap{ Width = BUFFER_WIDTH; Height = BUFFER_HEIGHT; Format 
 texture texGravitySeedMapCopy{ Width = BUFFER_WIDTH; Height = BUFFER_HEIGHT; Format = R16F; };
 texture texGravityDistanceMap{ Width = BUFFER_WIDTH; Height = BUFFER_HEIGHT; Format = R16F; };
 texture texGravityDistanceMapCopy{ Width = BUFFER_WIDTH; Height = BUFFER_HEIGHT; Format = R16F; };
-texture texGravityCurrentSeed{ Width = 1; Height = 1; Format = R16F; };
+texture texGravityCurrentSeed{ Width = 1; Height = 2; Format = R16F; };
 texture texGravitySeedMap2 < source = "gravityrng.png"; > { Width = 1920; Height = 1080; Format = RGBA8; };
 //
 // samplers
@@ -231,7 +231,9 @@ float4 Gravity_main(float2 texcoord : TEXCOORD)
 void rng_generate(float4 vpos : SV_Position, float2 texcoord : TEXCOORD, out float fragment : SV_Target)
 {
 	float old_rng = tex2D(SamplerGravityCurrentSeed, float2(0, 0)).r;
+	old_rng += 100*tex2D(SamplerGravityCurrentSeed, float2(0, 1)).r;
 	float new_rng = GravityRNG + (useImage) ? 1 : 0;
+	new_rng += 100 * GravityIntensity;
 	float value = tex2D(SamplerGravitySeedMap2, texcoord).r;
 	value = saturate((value - 1 + GravityRNG) /GravityRNG);
 	fragment = (abs(old_rng - new_rng) > 0.001) ? (useImage ? value : mandelbrotRNG(texcoord)) : tex2D(SamplerGravitySeedMapCopy, texcoord).r;
@@ -244,7 +246,9 @@ void rng_update_map(float4 vpos : SV_Position, float2 texcoord : TEXCOORD, out f
 void dist_generate(float4 vpos : SV_Position, float2 texcoord : TEXCOORD, out float fragment : SV_Target)
 {
 	float old_rng = tex2D(SamplerGravityCurrentSeed, float2(0, 0)).r;
+	old_rng += 100 * tex2D(SamplerGravityCurrentSeed, float2(0, 1)).r;
 	float new_rng = GravityRNG + (useImage) ? 1 : 0;
+	new_rng += 100 * GravityIntensity;
 	fragment = (abs(old_rng - new_rng) > 0.001) ? distance_main(texcoord) : tex2D(SamplerGravityDistanceMapCopy, texcoord).r;
 }
 void dist_update_map(float4 vpos : SV_Position, float2 texcoord : TEXCOORD, out float fragment : SV_Target)
@@ -254,8 +258,11 @@ void dist_update_map(float4 vpos : SV_Position, float2 texcoord : TEXCOORD, out 
 //SEED + FUNCTION
 void rng_update_seed(float4 vpos : SV_Position, float2 texcoord : TEXCOORD, out float fragment : SV_Target)
 {
-	fragment = GravityRNG;
-	fragment += useImage ? 1 : 0;
+	
+	float fragment1 = GravityRNG;
+	fragment1 += useImage ? 0.01 : 0;
+	float fragment2 = GravityIntensity;
+	fragment = ((texcoord.y == 1) ? fragment2 : fragment1);
 }
 void gravity_func(float4 vpos : SV_Position, float2 texcoord : TEXCOORD, out float4 outFragment : SV_Target)
 {
