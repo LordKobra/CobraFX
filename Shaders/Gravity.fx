@@ -4,6 +4,9 @@
 // currently VERY resource-intensive
 // This effect lets pixels gravitate towards the bottom in a 3D environment.
 // It uses a custom seed (currently the Mandelbrot set) to determine the intensity of each pixel.
+// Make sure to also test out the texture-RNG variant with the picture "gravityrng.png" provided in Textures.
+// You can replace the texture with your own picture, as long as it is 1920x1080, RGBA8 and has the same name. 
+// Only the red-intensity is taken. So either use red images or greyscale images.
 // The effect can be applied to a specific area like a DoF shader. The basic methods for this were taken with permission
 // from https://github.com/FransBouma/OtisFX/blob/master/Shaders/Emphasize.fx
 /////////////////////////////////////////////////////////
