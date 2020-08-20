@@ -93,6 +93,7 @@ texture texGravityDistanceMap{ Width = BUFFER_WIDTH; Height = BUFFER_HEIGHT; For
 texture texGravityDistanceMapCopy{ Width = BUFFER_WIDTH; Height = BUFFER_HEIGHT; Format = R16F; };
 texture texGravityCurrentSeed{ Width = 1; Height = 2; Format = R16F; };
 texture texGravitySeedMap2 < source = "gravityrng.png"; > { Width = 1920; Height = 1080; Format = RGBA8; };
+texture texGravityCoC{ Width = BUFFER_WIDTH; Height = BUFFER_HEIGHT; Format = R16F; };
 //
 // samplers
 //
@@ -103,6 +104,7 @@ sampler2D SamplerGravityDistanceMap{ Texture = texGravityDistanceMap; };
 sampler2D SamplerGravityDistanceMapCopy{ Texture = texGravityDistanceMapCopy; };
 sampler2D SamplerGravityCurrentSeed{ Texture = texGravityCurrentSeed; };
 sampler2D SamplerGravitySeedMap2{ Texture = texGravitySeedMap2; };
+sampler2D SamplerGravityCoC{ Texture = texGravityCoC; };
 //
 // code
 //
@@ -121,20 +123,11 @@ float CalculateDepthDiffCoC(float2 texcoord : TEXCOORD)
 	const float scenefocus = FocusDepth;
 	const float desaturateFullRange = FocusRangeDepth + FocusEdgeDepth;
 	float depthdiff;
-
-	if (Spherical == true)
-	{
-		texcoord.x = (texcoord.x - Sphere_FocusHorizontal)*ReShade::ScreenSize.x;
-		texcoord.y = (texcoord.y - Sphere_FocusVertical)*ReShade::ScreenSize.y;
-		const float degreePerPixel = Sphere_FieldOfView / ReShade::ScreenSize.x;
-		const float fovDifference = sqrt((texcoord.x*texcoord.x) + (texcoord.y*texcoord.y))*degreePerPixel;
-		depthdiff = sqrt((scenedepth*scenedepth) + (scenefocus*scenefocus) - (2 * scenedepth*scenefocus*cos(fovDifference*(2 * M_PI / 360))));
-	}
-	else
-	{
-		depthdiff = abs(scenedepth - scenefocus);
-	}
-
+	texcoord.x = (texcoord.x - Sphere_FocusHorizontal)*ReShade::ScreenSize.x;
+	texcoord.y = (texcoord.y - Sphere_FocusVertical)*ReShade::ScreenSize.y;
+	const float degreePerPixel = Sphere_FieldOfView / ReShade::ScreenSize.x;
+	const float fovDifference = sqrt((texcoord.x*texcoord.x) + (texcoord.y*texcoord.y))*degreePerPixel;
+	depthdiff = Spherical ? sqrt((scenedepth*scenedepth) + (scenefocus*scenefocus) - (2 * scenedepth*scenefocus*cos(fovDifference*(2 * M_PI / 360)))) : depthdiff = abs(scenedepth - scenefocus);
 	return (1 - saturate((depthdiff > desaturateFullRange) ? 1.0 : smoothstep(0, desaturateFullRange, depthdiff)));
 }
 
@@ -192,7 +185,7 @@ float4 Gravity_main(float2 texcoord : TEXCOORD)
 {
 	float2 tex2 = texcoord;
 	float tex2_distance = 0;
-	if (GravityIntensity < 0.01) return tex2D(ReShade::BackBuffer, texcoord); // 1. check grav - global
+	//$if (GravityIntensity < 0.01) return tex2D(ReShade::BackBuffer, texcoord); // 1. check grav - global
 	// continue with local procedure
 	float depth_threshold = CalculateDepth(texcoord); //get base threshold
 	float pixelHeight = 1 / ReShade::ScreenSize.y; //get pixel size
@@ -204,23 +197,22 @@ float4 Gravity_main(float2 texcoord : TEXCOORD)
 
 	for (j = 0; j < iterations; j++)
 	{
+		bool skip = false;
 		// 2. check depth
 		float curr_depth = ReShade::GetLinearizedDepth(texcoord - j * offset);
-		if (curr_depth > depth_threshold) continue;
+		skip = ((curr_depth > depth_threshold) ? true : skip);
 		// 3. check focus
-		float focus = CalculateDepthDiffCoC(texcoord - j * offset);
-		if (focus < 0.01) continue;
+		//float focus = CalculateDepthDiffCoC(texcoord - j * offset);
+		float focus = tex2Dlod(SamplerGravityCoC, float4(texcoord - j * offset, 0, 1)).r;
+		skip = ((focus < 0.01) ? true : skip);
 		// 4. mandelbrotRNG
 		float mandelbrot = tex2Dlod(SamplerGravitySeedMap, float4(texcoord - j * offset, 0, 1)).r;
-		if (mandelbrot < 0.05) continue; //threshold!!!
+		skip = ((mandelbrot < 0.05) ? true : skip);
 		float tex_distance_max = GravityIntensity*focus*mandelbrot;
-
-		if ((tex_distance_max) > (j * offset.y))
-		{
-			depth_threshold = curr_depth;
-			tex2 = texcoord - j * offset;
-			tex2_distance = j * offset.y / tex_distance_max; //we want 0 close to 1 max distance
-		}
+		skip = ((tex_distance_max > (j*offset.y)) ? skip : true);
+		depth_threshold = (skip ? depth_threshold : curr_depth);
+		tex2 = (skip ? tex2 : (texcoord - j * offset));
+		tex2_distance = (skip ? tex2_distance : (j* offset.y / tex_distance_max));
 	}
 
 	float4 colFragment = tex2D(ReShade::BackBuffer, tex2);
@@ -230,10 +222,10 @@ float4 Gravity_main(float2 texcoord : TEXCOORD)
 //RNG MAP
 void rng_generate(float4 vpos : SV_Position, float2 texcoord : TEXCOORD, out float fragment : SV_Target)
 {
-	float old_rng = tex2D(SamplerGravityCurrentSeed, float2(0, 0)).r;
-	old_rng += 100*tex2D(SamplerGravityCurrentSeed, float2(0, 1)).r;
-	float new_rng = GravityRNG + (useImage) ? 1 : 0;
-	new_rng += 100 * GravityIntensity;
+	float old_rng = tex2D(SamplerGravityCurrentSeed, float2(0, 0.25)).r;
+	old_rng += tex2D(SamplerGravityCurrentSeed, float2(0, 0.75)).r;
+	float new_rng = GravityRNG + ((useImage) ? 0.01 : 0);
+	new_rng += GravityIntensity;
 	float value = tex2D(SamplerGravitySeedMap2, texcoord).r;
 	value = saturate((value - 1 + GravityRNG) /GravityRNG);
 	fragment = (abs(old_rng - new_rng) > 0.001) ? (useImage ? value : mandelbrotRNG(texcoord)) : tex2D(SamplerGravitySeedMapCopy, texcoord).r;
@@ -245,25 +237,29 @@ void rng_update_map(float4 vpos : SV_Position, float2 texcoord : TEXCOORD, out f
 //DISTANCE MAP
 void dist_generate(float4 vpos : SV_Position, float2 texcoord : TEXCOORD, out float fragment : SV_Target)
 {
-	float old_rng = tex2D(SamplerGravityCurrentSeed, float2(0, 0)).r;
-	old_rng += 100 * tex2D(SamplerGravityCurrentSeed, float2(0, 1)).r;
-	float new_rng = GravityRNG + (useImage) ? 1 : 0;
-	new_rng += 100 * GravityIntensity;
+	float old_rng = tex2D(SamplerGravityCurrentSeed, float2(0, 0.25)).r;
+	old_rng += tex2D(SamplerGravityCurrentSeed, float2(0, 0.75)).r;
+	float new_rng = GravityRNG + ((useImage) ? 0.01 : 0);
+	new_rng += GravityIntensity;
 	fragment = (abs(old_rng - new_rng) > 0.001) ? distance_main(texcoord) : tex2D(SamplerGravityDistanceMapCopy, texcoord).r;
 }
 void dist_update_map(float4 vpos : SV_Position, float2 texcoord : TEXCOORD, out float fragment : SV_Target)
 {
 	fragment = tex2D(SamplerGravityDistanceMap, texcoord).r;
 }
-//SEED + FUNCTION
+//COC + SEED
+void coc_generate(float4 vpos : SV_Position, float2 texcoord : TEXCOORD, out float fragment : SV_Target)
+{
+	fragment = CalculateDepthDiffCoC(texcoord);
+}
 void rng_update_seed(float4 vpos : SV_Position, float2 texcoord : TEXCOORD, out float fragment : SV_Target)
 {
-	
 	float fragment1 = GravityRNG;
 	fragment1 += useImage ? 0.01 : 0;
 	float fragment2 = GravityIntensity;
-	fragment = ((texcoord.y == 1) ? fragment2 : fragment1);
+	fragment = ((texcoord.y < 0.5) ? fragment1 : fragment2);
 }
+//MAIN FUNCTION
 void gravity_func(float4 vpos : SV_Position, float2 texcoord : TEXCOORD, out float4 outFragment : SV_Target)
 {
 	outFragment = Gravity_main(texcoord);
@@ -277,6 +273,7 @@ technique Gravity
 	pass UpdateRNGMap { VertexShader = PostProcessVS; PixelShader = rng_update_map; RenderTarget = texGravitySeedMapCopy; }
 	pass GenerateDistance { VertexShader = PostProcessVS; PixelShader = dist_generate; RenderTarget = texGravityDistanceMap; }
 	pass UpdateDistance { VertexShader = PostProcessVS; PixelShader = dist_update_map; RenderTarget = texGravityDistanceMapCopy; }
+	pass GenerateCoC { VertexShader = PostProcessVS; PixelShader = coc_generate; RenderTarget = texGravityCoC; }
 	pass UpdateRNGSeed { VertexShader = PostProcessVS; PixelShader = rng_update_seed; RenderTarget = texGravityCurrentSeed; }
 	pass ApplyGravity { VertexShader = PostProcessVS; PixelShader = gravity_func; }
 }
