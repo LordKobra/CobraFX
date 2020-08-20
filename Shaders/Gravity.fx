@@ -228,7 +228,15 @@ void rng_generate(float4 vpos : SV_Position, float2 texcoord : TEXCOORD, out flo
 	new_rng += GravityIntensity;
 	float value = tex2D(SamplerGravitySeedMap2, texcoord).r;
 	value = saturate((value - 1 + GravityRNG) /GravityRNG);
-	fragment = (abs(old_rng - new_rng) > 0.001) ? (useImage ? value : mandelbrotRNG(texcoord)) : tex2D(SamplerGravitySeedMapCopy, texcoord).r;
+	if(abs(old_rng - new_rng) > 0.001)
+	{
+		fragment = (useImage ? value : mandelbrotRNG(texcoord));
+	}
+	else
+	{
+		fragment = tex2D(SamplerGravitySeedMapCopy, texcoord).r;
+	}
+	//fragment = (abs(old_rng - new_rng) > 0.001) ? (useImage ? value : mandelbrotRNG(texcoord)) : tex2D(SamplerGravitySeedMapCopy, texcoord).r;
 }
 void rng_update_map(float4 vpos : SV_Position, float2 texcoord : TEXCOORD, out float fragment : SV_Target)
 {
@@ -241,7 +249,14 @@ void dist_generate(float4 vpos : SV_Position, float2 texcoord : TEXCOORD, out fl
 	old_rng += tex2D(SamplerGravityCurrentSeed, float2(0, 0.75)).r;
 	float new_rng = GravityRNG + ((useImage) ? 0.01 : 0);
 	new_rng += GravityIntensity;
-	fragment = (abs(old_rng - new_rng) > 0.001) ? distance_main(texcoord) : tex2D(SamplerGravityDistanceMapCopy, texcoord).r;
+	if(abs(old_rng - new_rng) > 0.005)
+	{
+		fragment = distance_main(texcoord);
+	}
+	else 
+	{
+		fragment = tex2D(SamplerGravityDistanceMapCopy, texcoord).r;
+	}
 }
 void dist_update_map(float4 vpos : SV_Position, float2 texcoord : TEXCOORD, out float fragment : SV_Target)
 {
