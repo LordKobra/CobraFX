@@ -32,6 +32,9 @@ ui_tooltip = "Changes the RNG for each pixel.";
 uniform bool useImage <
 	ui_tooltip = "Changes the RNG to the input image called gravityrng.png located in Textures. You can change the image for your own seed as long as the name and resolution stay the same.";
 > = false;
+uniform bool allowOverlapping <
+	ui_tooltip = "This way the effect does not get hidden behind other objects.";
+> = false;
 uniform float FocusDepth <
 	ui_type = "drag";
 ui_min = 0.000; ui_max = 1.000;
@@ -187,7 +190,7 @@ namespace alt {
 			samp.w *= samp.z;
 
 			[flatten]
-			if (!any(samp < float4(depth, 0.01, 0.05, vpos.z))) {
+			if (!any(samp <= float4(depth-allowOverlapping, 0.01, 0.05, vpos.z))) {
 				sample_pos = vpos;
 				sample_pos.z /= samp.w;
 				depth = samp.x;
@@ -251,11 +254,28 @@ namespace alt {
 		outFragment = Gravity_main(vpos, texcoord);
 	}
 
-
+	// PRECALC
+	void vs_rng_generate2(uint vid : SV_VERTEXID, out float4 pos : SV_POSITION, out float2 uv : TEXCOORD)
+	{
+		PostProcessVS(vid, pos, uv);
+		pos.xy *= true;
+	}
+	void vs_dist_generate2(uint vid : SV_VERTEXID, out float4 pos : SV_POSITION, out float2 uv : TEXCOORD)
+	{
+		PostProcessVS(vid, pos, uv);
+		pos.xy *= true;
+	}
 #define ENABLE_RED (1 << 0)
 #define ENABLE_GREEN (1 << 1)
 #define ENABLE_BLUE (1 << 2)
 #define ENABLE_ALPHA (1 << 3)
+
+	technique PreGravity < hidden = true; enabled = true; timeout = 1000; >
+	{
+		pass GenerateRNG { VertexShader = vs_rng_generate2; PixelShader = rng_generate; RenderTarget = texGravityBuf; RenderTargetWriteMask = ENABLE_BLUE; }
+		pass GenerateDistance { VertexShader = vs_dist_generate2; PixelShader = dist_generate; RenderTarget = texGravityDistanceMap; }
+		pass GenerateCoC { VertexShader = PostProcessVS; PixelShader = coc_generate; RenderTarget = texGravityBuf; RenderTargetWriteMask = ENABLE_RED | ENABLE_GREEN | ENABLE_ALPHA; }
+	}
 
 	technique Gravity
 	{
