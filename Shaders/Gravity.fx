@@ -5,10 +5,12 @@
 // This effect lets pixels gravitate towards the bottom in a 3D environment.
 // It uses a custom seed (currently the Mandelbrot set) to determine the intensity of each pixel.
 // Make sure to also test out the texture-RNG variant with the picture "gravityrng.png" provided in Textures.
-// You can replace the texture with your own picture, as long as it is 1920x1080, RGBA8 and has the same name. 
+// You can replace the texture with your own picture, as long as it is 1920x1080, RGBA8 and has the same name.
 // Only the red-intensity is taken. So either use red images or greyscale images.
 // The effect can be applied to a specific area like a DoF shader. The basic methods for this were taken with permission
 // from https://github.com/FransBouma/OtisFX/blob/master/Shaders/Emphasize.fx
+// Thanks to Blue1992Shader for optimizing the code
+// Thanks to FransBouma, Lord of Lunacy and Annihlator for advise on my first shader :)
 /////////////////////////////////////////////////////////
 
 //
@@ -28,7 +30,7 @@ ui_step = 0.02;
 ui_tooltip = "Changes the RNG for each pixel.";
 > = 75;
 uniform bool useImage <
-ui_tooltip = "Changes the RNG to the input image called gravityrng.png located in Textures. You can change the image for your own seed as long as the name and resolution stay the same.";
+	ui_tooltip = "Changes the RNG to the input image called gravityrng.png located in Textures. You can change the image for your own seed as long as the name and resolution stay the same.";
 > = false;
 uniform float FocusDepth <
 	ui_type = "drag";
@@ -86,217 +88,192 @@ ui_tooltip = "Specifies the factor the desaturation is applied. Range from 0.0, 
 //
 // textures
 //
+namespace alt {
 
-texture texGravitySeedMap{ Width = BUFFER_WIDTH; Height = BUFFER_HEIGHT; Format = R16F; };
-texture texGravitySeedMapCopy{ Width = BUFFER_WIDTH; Height = BUFFER_HEIGHT; Format = R16F; };
-texture texGravityDistanceMap{ Width = BUFFER_WIDTH; Height = BUFFER_HEIGHT; Format = R16F; };
-texture texGravityDistanceMapCopy{ Width = BUFFER_WIDTH; Height = BUFFER_HEIGHT; Format = R16F; };
-texture texGravityCurrentSeed{ Width = 1; Height = 2; Format = R16F; };
-texture texGravitySeedMap2 < source = "gravityrng.png"; > { Width = 1920; Height = 1080; Format = RGBA8; };
-texture texGravityCoC{ Width = BUFFER_WIDTH; Height = BUFFER_HEIGHT; Format = R16F; };
-//
-// samplers
-//
+	texture texGravityDistanceMap{ Width = BUFFER_WIDTH; Height = BUFFER_HEIGHT; Format = R16F; };
+	texture texGravityCurrentSeed{ Format = R16F; };
+	texture texGravitySeedMapExt < source = "gravityrng.png"; > { Width = 1920; Height = 1080; Format = RGBA8; };
 
-sampler2D SamplerGravitySeedMap{ Texture = texGravitySeedMap; };
-sampler2D SamplerGravitySeedMapCopy{ Texture = texGravitySeedMapCopy; };
-sampler2D SamplerGravityDistanceMap{ Texture = texGravityDistanceMap; };
-sampler2D SamplerGravityDistanceMapCopy{ Texture = texGravityDistanceMapCopy; };
-sampler2D SamplerGravityCurrentSeed{ Texture = texGravityCurrentSeed; };
-sampler2D SamplerGravitySeedMap2{ Texture = texGravitySeedMap2; };
-sampler2D SamplerGravityCoC{ Texture = texGravityCoC; };
-//
-// code
-//
+	// raw depth, CoC,  GravitySeed, reserved
+	texture texGravityBuf{ Width = BUFFER_WIDTH; Height = BUFFER_HEIGHT; Format = RGBA16F; };
+	sampler2D SamplerGravityBuf{ Texture = texGravityBuf; };
+	//
+	// samplers
+	//
 
-// Calculate Pixel Depth
-float CalculateDepth(float2 texcoord : TEXCOORD)
-{
-	const float scenedepth = ReShade::GetLinearizedDepth(texcoord);
-	return scenedepth;
-}
-
-// Calculate Focus Intensity
-float CalculateDepthDiffCoC(float2 texcoord : TEXCOORD)
-{
-	const float scenedepth = ReShade::GetLinearizedDepth(texcoord);
-	const float scenefocus = FocusDepth;
-	const float desaturateFullRange = FocusRangeDepth + FocusEdgeDepth;
-	float depthdiff;
-	texcoord.x = (texcoord.x - Sphere_FocusHorizontal)*ReShade::ScreenSize.x;
-	texcoord.y = (texcoord.y - Sphere_FocusVertical)*ReShade::ScreenSize.y;
-	const float degreePerPixel = Sphere_FieldOfView / ReShade::ScreenSize.x;
-	const float fovDifference = sqrt((texcoord.x*texcoord.x) + (texcoord.y*texcoord.y))*degreePerPixel;
-	depthdiff = Spherical ? sqrt((scenedepth*scenedepth) + (scenefocus*scenefocus) - (2 * scenedepth*scenefocus*cos(fovDifference*(2 * M_PI / 360)))) : depthdiff = abs(scenedepth - scenefocus);
-	return (1 - saturate((depthdiff > desaturateFullRange) ? 1.0 : smoothstep(0, desaturateFullRange, depthdiff)));
-}
-
-//calculate Mandelbrot Seed
-//inspired by http://nuclear.mutantstargoat.com/articles/sdr_fract/
-float mandelbrotRNG(float2 texcoord: TEXCOORD)
-{
-	float2 center = float2(0.675, 0.46); // an interesting center at the mandelbrot for our zoom
-	float zoom = 0.033*GravityRNG; // smaller numbers increase zoom
-	float aspect = ReShade::ScreenSize.x / ReShade::ScreenSize.y; // format to screenspace
-	float2 z, c;
-	c.x = aspect * (texcoord.x - 0.5) * zoom - center.x;
-	c.y = (texcoord.y - 0.5) * zoom - center.y;
-	int i;
-	z = c;
-
-	for (i = 0; i < 100; i++)
+	sampler2D SamplerGravityDistanceMap{ Texture = texGravityDistanceMap; };
+	sampler2D SamplerGravityCurrentSeed{ Texture = texGravityCurrentSeed; };
+	sampler2D SamplerGravitySeedMapExt{ Texture = texGravitySeedMapExt; };
+	//
+	// code
+	//
+	// Calculate Focus Intensity
+	float CalculateDepthDiffCoC(float2 texcoord : TEXCOORD)
 	{
-		float x = z.x*z.x - z.y*z.y + c.x;
-		float y = 2 * z.x*z.y + c.y;
-		if ((x*x + y * y) > 4.0) break;
-		z.x = x;
-		z.y = y;
+		const float scenedepth = ReShade::GetLinearizedDepth(texcoord);
+		const float scenefocus = FocusDepth;
+		const float desaturateFullRange = FocusRangeDepth + FocusEdgeDepth;
+		float depthdiff;
+		texcoord.x = (texcoord.x - Sphere_FocusHorizontal)*ReShade::ScreenSize.x;
+		texcoord.y = (texcoord.y - Sphere_FocusVertical)*ReShade::ScreenSize.y;
+		const float degreePerPixel = Sphere_FieldOfView / ReShade::ScreenSize.x;
+		const float fovDifference = sqrt((texcoord.x*texcoord.x) + (texcoord.y*texcoord.y))*degreePerPixel;
+		depthdiff = Spherical ? sqrt((scenedepth*scenedepth) + (scenefocus*scenefocus) - (2 * scenedepth*scenefocus*cos(fovDifference*(2 * M_PI / 360)))) : depthdiff = abs(scenedepth - scenefocus);
+		return (1 - saturate((depthdiff > desaturateFullRange) ? 1.0 : smoothstep(0, desaturateFullRange, depthdiff)));
 	}
 
-	float intensity = 1.0;
-	return saturate(((intensity * (i == 100 ? 0.0 : float(i)) / 100) - 0.8) / 0.22);
-}
-// Calculates the maximum Distance Map
-// For every pixel in GravityIntensity: If GravityIntensity*mandelbrot > j*offset.y : set new real max distance
-float distance_main(float2 texcoord: TEXCOORD)
-{
-	float real_max_distance = 0.0;
-	float pixelHeight = 1.0 / ReShade::ScreenSize.y; //get pixel size
-	float2 offset = float2(0.0, pixelHeight);
-	int iterations = round(GravityIntensity / pixelHeight);
-	int j;
-
-	for (j = 0; j < iterations; j++)
+	//calculate Mandelbrot Seed
+	//inspired by http://nuclear.mutantstargoat.com/articles/sdr_fract/
+	float mandelbrotRNG(float2 texcoord: TEXCOORD)
 	{
+		float2 center = float2(0.675, 0.46); // an interesting center at the mandelbrot for our zoom
+		float zoom = 0.033*GravityRNG; // smaller numbers increase zoom
+		float aspect = ReShade::ScreenSize.x / ReShade::ScreenSize.y; // format to screenspace
+		float2 z, c;
+		c.x = aspect * (texcoord.x - 0.5) * zoom - center.x;
+		c.y = (texcoord.y - 0.5) * zoom - center.y;
+		int i;
+		z = c;
 
-		// 4. RNG
-		float rng_value = tex2Dlod(SamplerGravitySeedMap, float4(texcoord - j * offset, 0, 1)).r;
-		float tex_distance_max = GravityIntensity*rng_value;
-		if ((tex_distance_max) > (j * offset.y))
+		for (i = 0; i < 100; i++)
 		{
-			real_max_distance = j * offset.y; // new max threshold
+			float x = z.x*z.x - z.y*z.y + c.x;
+			float y = 2 * z.x*z.y + c.y;
+			if ((x*x + y * y) > 4.0) break;
+			z.x = x;
+			z.y = y;
 		}
+
+		float intensity = 1.0;
+		return saturate(((intensity * (i == 100 ? 0.0 : float(i)) / 100) - 0.8) / 0.22);
 	}
-
-	return  real_max_distance;
-}
-// Applies Gravity to the Pixels recursively
-float4 Gravity_main(float2 texcoord : TEXCOORD)
-{
-	float2 tex2 = texcoord;
-	float tex2_distance = 0;
-	//$if (GravityIntensity < 0.01) return tex2D(ReShade::BackBuffer, texcoord); // 1. check grav - global
-	// continue with local procedure
-	float depth_threshold = CalculateDepth(texcoord); //get base threshold
-	float pixelHeight = 1 / ReShade::ScreenSize.y; //get pixel size
-	float2 offset = float2(0.0, pixelHeight);
-	float real_max_distance = tex2D(SamplerGravityDistanceMap, texcoord).r;
-	int iterations = round(real_max_distance / pixelHeight);
-	
-	int j;
-
-	for (j = 0; j < iterations; j++)
+	// Calculates the maximum Distance Map
+	// For every pixel in GravityIntensity: If GravityIntensity*mandelbrot > j*offset.y : set new real max distance
+	float distance_main(float2 texcoord: TEXCOORD)
 	{
-		bool skip = false;
-		// 2. check depth
-		float curr_depth = ReShade::GetLinearizedDepth(texcoord - j * offset);
-		skip = ((curr_depth > depth_threshold) ? true : skip);
-		// 3. check focus
-		//float focus = CalculateDepthDiffCoC(texcoord - j * offset);
-		float focus = tex2Dlod(SamplerGravityCoC, float4(texcoord - j * offset, 0, 1)).r;
-		skip = ((focus < 0.01) ? true : skip);
-		// 4. mandelbrotRNG
-		float mandelbrot = tex2Dlod(SamplerGravitySeedMap, float4(texcoord - j * offset, 0, 1)).r;
-		skip = ((mandelbrot < 0.05) ? true : skip);
-		float tex_distance_max = GravityIntensity*focus*mandelbrot;
-		skip = ((tex_distance_max > (j*offset.y)) ? skip : true);
-		depth_threshold = (skip ? depth_threshold : curr_depth);
-		tex2 = (skip ? tex2 : (texcoord - j * offset));
-		tex2_distance = (skip ? tex2_distance : (j* offset.y / tex_distance_max));
+		float real_max_distance = 0.0;
+		float2 offset = float2(0.0, BUFFER_RCP_HEIGHT);
+		int iterations = round(min(texcoord.y, GravityIntensity) * BUFFER_HEIGHT);
+		int j;
+
+		for (j = 0; j < iterations; j++)
+		{
+
+			// 4. RNG
+			float rng_value = tex2Dlod(SamplerGravityBuf, float4(texcoord - j * offset, 0, 1)).b;
+			float tex_distance_max = GravityIntensity * rng_value;
+			if ((tex_distance_max) > (j * offset.y))
+			{
+				real_max_distance = j * offset.y; // new max threshold
+			}
+		}
+		return  real_max_distance;
 	}
 
-	float4 colFragment = tex2D(ReShade::BackBuffer, tex2);
-	return lerp(colFragment, float4(BlendColor, 1.0),tex2_distance*EffectFactor);
-}
 
-//RNG MAP
-void rng_generate(float4 vpos : SV_Position, float2 texcoord : TEXCOORD, out float fragment : SV_Target)
-{
-	float old_rng = tex2D(SamplerGravityCurrentSeed, float2(0, 0.25)).r;
-	old_rng += tex2D(SamplerGravityCurrentSeed, float2(0, 0.75)).r;
-	float new_rng = GravityRNG + ((useImage) ? 0.01 : 0);
-	new_rng += GravityIntensity;
-	float value = tex2D(SamplerGravitySeedMap2, texcoord).r;
-	value = saturate((value - 1 + GravityRNG) /GravityRNG);
-	if(abs(old_rng - new_rng) > 0.001)
+
+	// Applies Gravity to the Pixels recursively
+	float4 Gravity_main(float4 vpos, float2 texcoord : TEXCOORD)
 	{
-		fragment = (useImage ? value : mandelbrotRNG(texcoord));
+		float real_max_distance = tex2Dfetch(SamplerGravityDistanceMap, vpos.xyww).r;
+		int iterations = round(real_max_distance * BUFFER_HEIGHT);
+
+		vpos.z = 0;
+		float4 sample_pos = vpos;
+		for (float depth = tex2Dfetch(SamplerGravityBuf, vpos.xyww).x;
+			vpos.z < iterations; ++vpos.z, --vpos.y)
+		{
+			float4 samp = tex2Dfetch(SamplerGravityBuf, vpos.xyww);
+			samp.w *= samp.z;
+
+			[flatten]
+			if (!any(samp < float4(depth, 0.01, 0.05, vpos.z))) {
+				sample_pos = vpos;
+				sample_pos.z /= samp.w;
+				depth = samp.x;
+			}
+		}
+
+		float4 colFragment = tex2Dfetch(ReShade::BackBuffer, sample_pos.xyww);
+		return lerp(colFragment, float4(BlendColor, 1.0), sample_pos.z * EffectFactor);
 	}
-	else
+
+	float rng_delta()
 	{
-		fragment = tex2D(SamplerGravitySeedMapCopy, texcoord).r;
+		float2 old_rng = tex2Dfetch(SamplerGravityCurrentSeed, (0).xxxx).x;
+		float new_rng = GravityRNG + useImage * 0.01 + GravityIntensity;
+		return old_rng.x - new_rng;
 	}
-	//fragment = (abs(old_rng - new_rng) > 0.001) ? (useImage ? value : mandelbrotRNG(texcoord)) : tex2D(SamplerGravitySeedMapCopy, texcoord).r;
-}
-void rng_update_map(float4 vpos : SV_Position, float2 texcoord : TEXCOORD, out float fragment : SV_Target)
-{
-	fragment = tex2D(SamplerGravitySeedMap, texcoord).r;
-}
-//DISTANCE MAP
-void dist_generate(float4 vpos : SV_Position, float2 texcoord : TEXCOORD, out float fragment : SV_Target)
-{
-	float old_rng = tex2D(SamplerGravityCurrentSeed, float2(0, 0.25)).r;
-	old_rng += tex2D(SamplerGravityCurrentSeed, float2(0, 0.75)).r;
-	float new_rng = GravityRNG + ((useImage) ? 0.01 : 0);
-	new_rng += GravityIntensity;
-	if(abs(old_rng - new_rng) > 0.005)
+
+	void vs_rng_generate(uint vid : SV_VERTEXID, out float4 pos : SV_POSITION, out float2 uv : TEXCOORD)
+	{
+		PostProcessVS(vid, pos, uv);
+		pos.xy *= abs(rng_delta()) > 0.005;
+	}
+
+	//RNG MAP
+	void rng_generate(float4 vpos : SV_Position, float2 texcoord : TEXCOORD, out float4 fragment : SV_Target)
+	{
+		float value = tex2D(SamplerGravitySeedMapExt, texcoord).r;
+		value = saturate((value - 1 + GravityRNG) / GravityRNG);
+		fragment = useImage ? value : mandelbrotRNG(texcoord);
+	}
+
+
+	void vs_dist_generate(uint vid : SV_VERTEXID, out float4 pos : SV_POSITION, out float2 uv : TEXCOORD)
+	{
+		PostProcessVS(vid, pos, uv);
+		pos.xy *= abs(rng_delta()) > 0.005;
+	}
+
+	//DISTANCE MAP
+	void dist_generate(float4 vpos : SV_Position, float2 texcoord : TEXCOORD, out float fragment : SV_Target)
 	{
 		fragment = distance_main(texcoord);
 	}
-	else 
+
+	//COC + SEED
+	void coc_generate(float4 vpos : SV_Position, float2 texcoord : TEXCOORD, out float4 fragment : SV_Target)
 	{
-		fragment = tex2D(SamplerGravityDistanceMapCopy, texcoord).r;
+		vpos.w = 0;
+		fragment.x = -ReShade::GetLinearizedDepth(texcoord);
+		fragment.y = CalculateDepthDiffCoC(texcoord);
+		fragment.zw = GravityIntensity * fragment.y*BUFFER_HEIGHT;
 	}
-}
-void dist_update_map(float4 vpos : SV_Position, float2 texcoord : TEXCOORD, out float fragment : SV_Target)
-{
-	fragment = tex2D(SamplerGravityDistanceMap, texcoord).r;
-}
-//COC + SEED
-void coc_generate(float4 vpos : SV_Position, float2 texcoord : TEXCOORD, out float fragment : SV_Target)
-{
-	fragment = CalculateDepthDiffCoC(texcoord);
-}
-void rng_update_seed(float4 vpos : SV_Position, float2 texcoord : TEXCOORD, out float fragment : SV_Target)
-{
-	float fragment1 = GravityRNG;
-	fragment1 += useImage ? 0.01 : 0;
-	float fragment2 = GravityIntensity;
-	fragment = ((texcoord.y < 0.5) ? fragment1 : fragment2);
-}
-//MAIN FUNCTION
-void gravity_func(float4 vpos : SV_Position, float2 texcoord : TEXCOORD, out float4 outFragment : SV_Target)
-{
-	outFragment = Gravity_main(texcoord);
-	return;
-}
+	void rng_update_seed(float4 vpos : SV_Position, float2 texcoord : TEXCOORD, out float fragment : SV_Target)
+	{
+		fragment = GravityRNG + useImage * 0.01 + GravityIntensity;
+	}
+	//MAIN FUNCTION
+	void gravity_func(float4 vpos : SV_Position, float2 texcoord : TEXCOORD, out float4 outFragment : SV_Target)
+	{
+		vpos.w = 0;
+		outFragment = Gravity_main(vpos, texcoord);
+	}
 
 
-technique Gravity
-{
-	pass GenerateRNG { VertexShader = PostProcessVS; PixelShader = rng_generate; RenderTarget = texGravitySeedMap; }
-	pass UpdateRNGMap { VertexShader = PostProcessVS; PixelShader = rng_update_map; RenderTarget = texGravitySeedMapCopy; }
-	pass GenerateDistance { VertexShader = PostProcessVS; PixelShader = dist_generate; RenderTarget = texGravityDistanceMap; }
-	pass UpdateDistance { VertexShader = PostProcessVS; PixelShader = dist_update_map; RenderTarget = texGravityDistanceMapCopy; }
-	pass GenerateCoC { VertexShader = PostProcessVS; PixelShader = coc_generate; RenderTarget = texGravityCoC; }
-	pass UpdateRNGSeed { VertexShader = PostProcessVS; PixelShader = rng_update_seed; RenderTarget = texGravityCurrentSeed; }
-	pass ApplyGravity { VertexShader = PostProcessVS; PixelShader = gravity_func; }
+#define ENABLE_RED (1 << 0)
+#define ENABLE_GREEN (1 << 1)
+#define ENABLE_BLUE (1 << 2)
+#define ENABLE_ALPHA (1 << 3)
+
+	technique Gravity
+	{
+		pass GenerateRNG { VertexShader = vs_rng_generate; PixelShader = rng_generate; RenderTarget = texGravityBuf; RenderTargetWriteMask = ENABLE_BLUE; }
+		// dist to max scather point.
+		pass GenerateDistance { VertexShader = vs_dist_generate; PixelShader = dist_generate; RenderTarget = texGravityDistanceMap; }
+
+		// also populate x with raw depth.
+		pass GenerateCoC { VertexShader = PostProcessVS; PixelShader = coc_generate; RenderTarget = texGravityBuf; RenderTargetWriteMask = ENABLE_RED | ENABLE_GREEN | ENABLE_ALPHA; }
+
+		pass UpdateRNGSeed { VertexShader = PostProcessVS; PixelShader = rng_update_seed; RenderTarget = texGravityCurrentSeed; }
+
+		pass ApplyGravity { VertexShader = PostProcessVS; PixelShader = gravity_func; }
+	}
 }
 /* About the Pipeline:
 	We generate the RNGMap interactively. It's our intensity function.
-	We need a copy, because you cant read and write to the same object.
 	Then comes a map which generates the maximum distance a pixel has to search only based on RNGMap and GravityStrength.
-	We need again a copy.
 	Then we update the current settings. Only if the settings change the above steps have to be executed again.
 	Then we apply Gravity including the DepthMap and colours.
 */
