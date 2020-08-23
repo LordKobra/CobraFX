@@ -75,12 +75,20 @@ uniform float3 BlendColor <
 	ui_type = "color";
 ui_tooltip = "Specifies the blend color to blend with the greyscale. in (Red, Green, Blue). Use dark colors to darken further away objects";
 > = float3(0.55, 1.0, 0.95);
-
 uniform float EffectFactor <
 	ui_type = "drag";
 ui_min = 0.0; ui_max = 1.0;
 ui_tooltip = "Specifies the factor the desaturation is applied. Range from 0.0, which means the effect is off (normal image), till 1.0 which means the desaturated parts are\nfull greyscale (or color blending if that's enabled)";
 > = 1.0;
+uniform float3 FilterColor <
+	ui_type = "color";
+ui_tooltip = "addDesc";
+> = float3(0.55, 1.0, 0.95);
+uniform float FilterRange <
+	ui_type = "drag";
+ui_min = 0; ui_max = 1.74;
+ui_tooltip = "addDesc";
+> = 0.5;
 
 #include "Reshade.fxh"
 
@@ -113,6 +121,7 @@ namespace alt {
 	// Calculate Focus Intensity
 	float CalculateDepthDiffCoC(float2 texcoord : TEXCOORD)
 	{
+		float4 col_val = tex2D(ReShade::BackBuffer, texcoord);
 		const float scenedepth = ReShade::GetLinearizedDepth(texcoord);
 		const float scenefocus = FocusDepth;
 		const float desaturateFullRange = FocusRangeDepth + FocusEdgeDepth;
@@ -122,7 +131,8 @@ namespace alt {
 		const float degreePerPixel = Sphere_FieldOfView / ReShade::ScreenSize.x;
 		const float fovDifference = sqrt((texcoord.x*texcoord.x) + (texcoord.y*texcoord.y))*degreePerPixel;
 		depthdiff = Spherical ? sqrt((scenedepth*scenedepth) + (scenefocus*scenefocus) - (2 * scenedepth*scenefocus*cos(fovDifference*(2 * M_PI / 360)))) : depthdiff = abs(scenedepth - scenefocus);
-		return (1 - saturate((depthdiff > desaturateFullRange) ? 1.0 : smoothstep(0, desaturateFullRange, depthdiff)));
+		float coc_val = (1 - saturate((depthdiff > desaturateFullRange) ? 1.0 : smoothstep(0, desaturateFullRange, depthdiff)));
+		return ((distance(col_val.rgb,FilterColor.rgb) < FilterRange) ? coc_val : 0.0);
 	}
 
 	//calculate Mandelbrot Seed
