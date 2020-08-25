@@ -15,7 +15,7 @@ ui_tooltip = "Specifies the blend color to blend with the greyscale. in (Red, Gr
 namespace primitiveColor
 {
 #ifndef COLOR_HEIGHT
-#define COLOR_HEIGHT	BUFFER_HEIGHT/8
+#define COLOR_HEIGHT	BUFFER_HEIGHT/4
 #endif
 	//
 	// textures
@@ -38,13 +38,13 @@ namespace primitiveColor
 		return (val < 0) ? false : true; // a <= b
 	}
 
-	void merge_sort(inout float4 A[COLOR_HEIGHT]) //credit source pls
+	void merge_sort(inout float4 A[COLOR_HEIGHT], int low, int high) //credit source pls
 	{
 		float4 temp[COLOR_HEIGHT] = A;
 		//alt
 		int n = COLOR_HEIGHT;
-		int high = n - 1;
-		int low = 0;
+		//int high = n - 1;
+		//int low = 0;
 		for (int m = 1; m <= high - low; m = 2 * m)
 		{
 			for (int i = low; i < high; i += 2 * m)
@@ -84,41 +84,42 @@ namespace primitiveColor
 		float column = id.x;
 		float colNorm = column * BUFFER_RCP_WIDTH;
 		float4 colortable[COLOR_HEIGHT];
-		//int interval_start = 0;
-		//int interval_end = 0;
-		//bool past_active = false, current_active;
-		//float3 current_color, d1, d2;
+		int interval_start = 0;
+		int interval_end = 0;
+		bool past_active = false, current_active = false;
+		float4 current_color, d1, d2;
 		int i;
 		for (i = 0; i < COLOR_HEIGHT; i++) //color1 = area of peace, color2 = area of sorting
 		{
 			//current
 			colortable[i] = tex2Dfetch(SamplerHalfRes, int4(id.x, i, 0, 0)); //replace with COLOR_HEIGHT_DEPENDANCY IN FUTURE
 		}
-		/*[fastopt] for (i = 0; i < COLOR_HEIGHT; i++) //color1 = area of peace, color2 = area of sorting
+		for (i = 0; i < COLOR_HEIGHT; i++) //color1 = area of peace, color2 = area of sorting
 		{
-			current_color = colortable[i];;
-			d1 = distance(Color1.rgb, current_color);
-			d2 = distance(Color2.rgb, current_color);
+			current_color = colortable[i];
+			d1 = distance(Color1.rgb, current_color.rgb);
+			d2 = distance(Color2.rgb, current_color.rgb);
 			current_active = (d1 < d2) ? true : false;
-			[flatten] if (!past_active && current_active) // the start of a great adventure
+			if (!past_active && current_active) // the start of a great adventure
 			{
 				interval_start = i;
 				past_active = true; // change state
 				//continue;
 			}
-			[branch] if (past_active && !current_active)
+			if (past_active && !current_active)
 			{
 				interval_end = i - 1;
-				past_active = false; //change state
+				past_active = false;
+				break; //change state
 				//barrier();
-				//merge_sort(colortable);
+				//merge_sort(colortable, interval_start, interval_end);
 				//continue;
 			}
 
-		}*/
+		}
 		//float3 copy[COLOR_HEIGHT] = colortable;
 		//barrier();
-		merge_sort(colortable);
+		merge_sort(colortable, interval_start, interval_end);
 		for (i = 0; i < COLOR_HEIGHT; i++) {
 			tex2Dstore(texColorSortStorage, float2(id.x, i), float4(colortable[i]));
 		}
