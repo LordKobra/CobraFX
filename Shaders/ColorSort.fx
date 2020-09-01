@@ -138,6 +138,7 @@ namespace primitiveColor
 
 			}
 		}
+		barrier();
 		// sort the small arrays
 		merge_sort(interval_start, interval_end,1);
 		//combine
@@ -279,9 +280,7 @@ namespace primitiveColor
 			for (int w = 0; w < cc; w++)
 			{
 				colortable[global_position + w] = sorted_array[w];
-			}			
-			barrier();
-			
+			}
 		}
 		barrier();
 		for (i = 0; i < COLOR_HEIGHT / THREAD_HEIGHT; i++) 
@@ -292,10 +291,6 @@ namespace primitiveColor
 	void half_color(float4 vpos : SV_Position, float2 texcoord : TEXCOORD, out float4 fragment : SV_Target)
 	{
 		fragment = tex2D(ReShade::BackBuffer, texcoord);
-	}
-	void switch_1(float4 vpos : SV_Position, float2 texcoord : TEXCOORD, out float4 fragment : SV_Target)
-	{
-		fragment = tex2D(SamplerColorSort, texcoord);
 	}
 	void downsample_color(float4 vpos : SV_Position, float2 texcoord : TEXCOORD, out float4 fragment : SV_Target)
 	{
