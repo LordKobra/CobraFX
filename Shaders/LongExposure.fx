@@ -1,6 +1,15 @@
 /////////////////////////////////////////////////////////
 // LongExposure.fx by SirCobra
 // Version 0.1
+//
+// --------Description---------
+// There are two modes: Filter by brightness or all colors.
+// If you filter by brightness, brighter pixels will stay longer in the frame.
+//
+// If you do not filter by brightness, every change will have an impact.
+// To preserve every change on a static scenery, it is recommended to freeze the current image and not move the camera.
+// It will give the shader an expectation of the original image, so it can better keep track of changes.
+// Exposure Duration and Precision will let you decide how long the effect should stay.
 /////////////////////////////////////////////////////////
 
 //
@@ -10,7 +19,7 @@ uniform float ExposureDuration <
 	ui_type = "drag";
 ui_min = 0.000; ui_max = 1.000;
 ui_step = 0.001;
-ui_tooltip = "Exposure Duration. 0 means";
+ui_tooltip = "Exposure Duration. 0 means no duration, 1 means infinite duration.";
 > = 0.5;
 uniform float Precision <
 	ui_type = "drag";
@@ -22,7 +31,7 @@ uniform bool byBrightness <
 ui_tooltip = "Turn off to capture all colors. Turn on to go by brightness only.\n";
 > = false;
 uniform bool Freeze <
-ui_tooltip = "Freezes the scene.\n";
+ui_tooltip = "Freezes the scene. Do this on a static scene without moving the camera, so the shader can better preserve changes.\n";
 > = false;
 uniform float FreezeThreshold <
 	ui_type = "drag";
@@ -34,6 +43,10 @@ ui_tooltip = "This determins the minimum difference in color necessary to overwr
 #ifndef M_PI
 #define M_PI 3.1415927
 #endif
+
+//
+// Code
+//
 namespace LongExposure {
 	texture texExposure{ Width = BUFFER_WIDTH; Height = BUFFER_HEIGHT; Format = RGBA16; };
 	texture texExposureCopy{ Width = BUFFER_WIDTH; Height = BUFFER_HEIGHT; Format = RGBA16; };
