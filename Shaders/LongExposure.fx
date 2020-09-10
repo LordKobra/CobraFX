@@ -27,6 +27,12 @@ ui_min = 1; ui_max = 10;
 ui_step = 1;
 ui_tooltip = "Scaling Precision for longer Exposures. 1 means high precision on low exposures, 10 high precision on high exposures.";
 > = 1;
+uniform float Intensity <
+	ui_type = "drag";
+ui_min = 0.000; ui_max = 1.000;
+ui_step = 0.001;
+ui_tooltip = "Exposure Intensity. 0 means no changes at all, 1 means instant changes.";
+> = 0.33;
 uniform bool byBrightness <
 ui_tooltip = "Turn off to capture all colors. Turn on to go by brightness only.\n";
 > = false;
@@ -58,37 +64,35 @@ namespace LongExposure {
 	sampler2D samplerFreezeCopy{ Texture = texFreezeCopy; };
 
 
-	float4 mix_color(float4 base, float4 originalColor, float4 sampleColor)
+	float4 mix_color(float4 b, float4 o, float4 s) // base, original, sample
 	{
-		float ExposureDuration2 = sqrt(saturate(1 - (ExposureDuration - 1)*(ExposureDuration - 1)));//saturate(tan(1.471*(ExposureDuration - 1)) / 10 + 1);
+		float E2 = sqrt(saturate(1 - (ExposureDuration - 1)*(ExposureDuration - 1)));//saturate(tan(1.471*(ExposureDuration - 1)) / 10 + 1);
 		float4 outputColor;
 		if (byBrightness) 
 		{
-			outputColor.r = ((originalColor.r + originalColor.g + originalColor.b) < (sampleColor.r + sampleColor.g + sampleColor.b)) ? sampleColor.r : originalColor.r - (1/ Precision *(1 - ExposureDuration2))*abs(sampleColor.r - originalColor.r);
-			outputColor.g = ((originalColor.r + originalColor.g + originalColor.b) < (sampleColor.r + sampleColor.g + sampleColor.b)) ? sampleColor.g : originalColor.g - (1/ Precision *(1 - ExposureDuration2))*abs(sampleColor.g - originalColor.g);
-			outputColor.b = ((originalColor.r + originalColor.g + originalColor.b) < (sampleColor.r + sampleColor.g + sampleColor.b)) ? sampleColor.b : originalColor.b - (1/ Precision *(1 - ExposureDuration2))*abs(sampleColor.b - originalColor.b);
+			outputColor.r = ((o.r + o.g + o.b) < (s.r + s.g + s.b)) ? o.r + Intensity * abs(s.r - o.r) : o.r - (1/ Precision *(1 - E2))*abs(s.r - o.r);
+			outputColor.g = ((o.r + o.g + o.b) < (s.r + s.g + s.b)) ? o.g + Intensity * abs(s.g - o.g) : o.g - (1/ Precision *(1 - E2))*abs(s.g - o.g);
+			outputColor.b = ((o.r + o.g + o.b) < (s.r + s.g + s.b)) ? o.b + Intensity * abs(s.b - o.b) : o.b - (1/ Precision *(1 - E2))*abs(s.b - o.b);
 		}
 		else 
 		{
 			if(Freeze) // base.r check diff originalColor sampleColor to r d(base,sample) d(base, original) if d_bs < d_bo, keep, else increase by d_bo+q*(d_bs-d_bo or fixed)
 			{
-				float d_bs = abs(base.r - sampleColor.r) + abs(base.g - sampleColor.g) + abs(base.b - sampleColor.b);
-				float d_bo = abs(base.r - originalColor.r) + abs(base.g - originalColor.g) + abs(base.b - originalColor.b);
-				float d_os = abs(sampleColor.r + sampleColor.g + sampleColor.b - originalColor.r - originalColor.g - originalColor.b);
-
-				outputColor.r = originalColor.r + (sampleColor.r - originalColor.r)*0.33*saturate(d_bs / 3 - FreezeThreshold);
-				outputColor.g = originalColor.g + (sampleColor.g - originalColor.g)*0.33*saturate(d_bs / 3 - FreezeThreshold);
-				outputColor.b = originalColor.b + (sampleColor.b - originalColor.b)*0.33*saturate(d_bs / 3 - FreezeThreshold);
+				float d_bs = abs(b.r - s.r) + abs(b.g - s.g) + abs(b.b - s.b);
+				//application
+				outputColor.r = o.r + (s.r - o.r)*Intensity*saturate(d_bs / 3 - FreezeThreshold);
+				outputColor.g = o.g + (s.g - o.g)*Intensity*saturate(d_bs / 3 - FreezeThreshold);
+				outputColor.b = o.b + (s.b - o.b)*Intensity*saturate(d_bs / 3 - FreezeThreshold);
 				//degradation
-				outputColor.r -= (outputColor.r - base.r) * (1 / Precision * (1 - ExposureDuration2));
-				outputColor.g -= (outputColor.g - base.g) * (1 / Precision * (1 - ExposureDuration2));
-				outputColor.b -= (outputColor.b - base.b) * (1 / Precision * (1 - ExposureDuration2));
+				outputColor.r -= (outputColor.r - b.r) * (1 / Precision * (1 - E2));
+				outputColor.g -= (outputColor.g - b.g) * (1 / Precision * (1 - E2));
+				outputColor.b -= (outputColor.b - b.b) * (1 / Precision * (1 - E2));
 			}
 			else
 			{
-				outputColor.r = (originalColor.r < sampleColor.r) ? originalColor.r + (1 / Precision * (1 - ExposureDuration2))*abs(sampleColor.r - originalColor.r) : originalColor.r - (1 / Precision * (1 - ExposureDuration2))*abs(sampleColor.r - originalColor.r);
-				outputColor.g = (originalColor.g < sampleColor.g) ? originalColor.g + (1 / Precision * (1 - ExposureDuration2))*abs(sampleColor.g - originalColor.g) : originalColor.g - (1 / Precision * (1 - ExposureDuration2))*abs(sampleColor.g - originalColor.g);
-				outputColor.b = (originalColor.b < sampleColor.b) ? originalColor.b + (1 / Precision * (1 - ExposureDuration2))*abs(sampleColor.b - originalColor.b) : originalColor.b - (1 / Precision * (1 - ExposureDuration2))*abs(sampleColor.b - originalColor.b);
+				outputColor.r = (o.r < s.r) ? o.r + (1 / Precision * (1 - E2))*abs(s.r - o.r) : o.r - (1 / Precision * (1 - E2))*abs(s.r - o.r);
+				outputColor.g = (o.g < s.g) ? o.g + (1 / Precision * (1 - E2))*abs(s.g - o.g) : o.g - (1 / Precision * (1 - E2))*abs(s.g - o.g);
+				outputColor.b = (o.b < s.b) ? o.b + (1 / Precision * (1 - E2))*abs(s.b - o.b) : o.b - (1 / Precision * (1 - E2))*abs(s.b - o.b);
 			}
 		}
 		outputColor.a = 1.0;
