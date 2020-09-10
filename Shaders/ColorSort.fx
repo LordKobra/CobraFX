@@ -2,18 +2,24 @@
 // ColorSort.fx by SirCobra
 // Version 0.1
 // currently resource-intensive
-// This compute shader only runs on the ReShade 4.8 Beta and DX11 or newer.
+// This compute shader only runs on the ReShade 4.8 Beta and DX11+ or newer OpenGL games.
 // This effect does sort all colors on a vertical line by brightness.
 // The effect can be applied to a specific area like a DoF shader. The basic methods for this were taken with permission
 // from https://github.com/FransBouma/OtisFX/blob/master/Shaders/Emphasize.fx
 // Thanks to kingeric1992 & Lord of Lunacy for tips on how to construct the algorithm. :)
 // The merge_sort function is adapted from this website: https://www.techiedelight.com/iterative-merge-sort-algorithm-bottom-up/
 // The multithreaded merge sort is constructed as described here: https://www.nvidia.in/docs/IO/67073/nvr-2008-001.pdf
+//
+// If the quality of the shader feels to low, you can adjust COLOR_HEIGHT in the preprocessor options. 
+// Only choose these numbers: 640 is Default, 768 is HQ, 1024 is Ultra.
 /////////////////////////////////////////////////////////
 
 //
 // UI
 //
+uniform bool ReverseSort <
+	ui_tooltip = "While active, it orders from dark to bright, top to bottom. Else it will sort from bright to dark.";
+> = false;
 uniform bool FilterColor <
 	ui_tooltip = "Activates the color filter option.";
 > = false;
@@ -94,7 +100,7 @@ namespace primitiveColor
 	bool min_color(float4 a, float4 b)
 	{
 		float val = b.a - a.a; // val > 0 for a smaller
-		val = (abs(val) < 0.1) ? ((a.r + a.g + a.b) - (b.r + b.g + b.b)) : val;
+		val = (abs(val) < 0.1) ? ((a.r + a.g + a.b) - (b.r + b.g + b.b))*(1-ReverseSort-ReverseSort) : val;
 		return (val < 0) ? false : true; // Returns False if a smaller, yes its weird
 	}
 	float3 mod(float3 x, float y) //x - y * floor(x/y).
