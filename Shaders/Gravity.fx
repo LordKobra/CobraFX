@@ -131,7 +131,7 @@ namespace alt {
 		const float degreePerPixel = Sphere_FieldOfView / ReShade::ScreenSize.x;
 		const float fovDifference = sqrt((texcoord.x*texcoord.x) + (texcoord.y*texcoord.y))*degreePerPixel;
 		depthdiff = Spherical ? sqrt((scenedepth*scenedepth) + (scenefocus*scenefocus) - (2 * scenedepth*scenefocus*cos(fovDifference*(2 * M_PI / 360)))) : depthdiff = abs(scenedepth - scenefocus);
-		float coc_val = (1 - saturate((depthdiff > desaturateFullRange) ? 1.0 : smoothstep(0, desaturateFullRange, depthdiff)));
+		float coc_val = (1 - saturate((depthdiff > desaturateFullRange) ? 1.0 : smoothstep(FocusRangeDepth, desaturateFullRange, depthdiff)));
 		return ((distance(col_val.rgb,FilterColor.rgb) < FilterRange) ? coc_val : 0.0);
 	}
 
