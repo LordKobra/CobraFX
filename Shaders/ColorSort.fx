@@ -79,13 +79,34 @@ uniform float FocusRangeDepth <
 	ui_step = 0.001;
 	ui_tooltip = "The depth of the range around the manual focus depth which should be emphasized. Outside this range, de-emphasizing takes place";
 > = 0.001;
+uniform bool Spherical <
+	ui_tooltip = "Enables Emphasize in a sphere around the focus-point instead of a 2D plane";
+> = false;
+uniform int Sphere_FieldOfView <
+	ui_type = "drag";
+ui_min = 1; ui_max = 180;
+ui_tooltip = "Specifies the estimated Field of View you are currently playing with. Range from 1, which means 1 Degree, till 180 which means 180 Degree (half the scene).\nNormal games tend to use values between 60 and 90.";
+> = 75;
+uniform float Sphere_FocusHorizontal <
+	ui_type = "drag";
+ui_min = 0; ui_max = 1;
+ui_tooltip = "Specifies the location of the focuspoint on the horizontal axis. Range from 0, which means left screen border, till 1 which means right screen border.";
+> = 0.5;
+uniform float Sphere_FocusVertical <
+	ui_type = "drag";
+ui_min = 0; ui_max = 1;
+ui_tooltip = "Specifies the location of the focuspoint on the vertical axis. Range from 0, which means upper screen border, till 1 which means bottom screen border.";
+> = 0.5;
 
 #include "Reshade.fxh"
+#ifndef M_PI
+	#define M_PI 3.1415927
+#endif
 #ifndef COLOR_HEIGHT
-#define COLOR_HEIGHT	640 //maybe needs multiple of 64 :/
+	#define COLOR_HEIGHT	640 //maybe needs multiple of 64 :/
 #endif
 #ifndef THREAD_HEIGHT
-#define THREAD_HEIGHT	16 // 2^n
+	#define THREAD_HEIGHT	16 // 2^n
 #endif
 
 namespace primitiveColor
@@ -158,7 +179,7 @@ namespace primitiveColor
 		return fragment;
 	}
 
-	bool inFocus(float4 rgbval, float scenedepth)
+	bool inFocus(float4 rgbval, float scenedepth, float2 texcoord)
 	{
 		//colorfilter
 		float4 hsvval = rgb2hsv(rgbval);
@@ -167,7 +188,14 @@ namespace primitiveColor
 		bool d3 = abs(hsvval.g - Saturation) <= SaturationRange;
 		bool is_color_focus = (d3 && d2 && d1) || FilterColor == 0; // color threshold
 		//depthfilter
-		bool is_depth_focus = (abs(scenedepth - FocusDepth) < FocusRangeDepth) || FilterDepth == 0;
+		float depthdiff;
+		texcoord.x = (texcoord.x - Sphere_FocusHorizontal)*ReShade::ScreenSize.x;
+		texcoord.y = (texcoord.y - Sphere_FocusVertical)*ReShade::ScreenSize.y;
+		const float degreePerPixel = Sphere_FieldOfView / ReShade::ScreenSize.x;
+		const float fovDifference = sqrt((texcoord.x*texcoord.x) + (texcoord.y*texcoord.y))*degreePerPixel;
+		depthdiff = Spherical ? sqrt((scenedepth*scenedepth) + (FocusDepth*FocusDepth) - (2 * scenedepth*FocusDepth*cos(fovDifference*(2 * M_PI / 360)))) : depthdiff = abs(scenedepth - FocusDepth);
+
+		bool is_depth_focus = (depthdiff < FocusRangeDepth) || FilterDepth == 0;
 		return is_color_focus && is_depth_focus;
 	}
 
@@ -230,7 +258,7 @@ namespace primitiveColor
 			{
 				colortable[i + tid.x*COLOR_HEIGHT] = tex2Dfetch(SamplerHalfRes, int4(id.x, i, 0, 0));
 				float scenedepth = ReShade::GetLinearizedDepth(float2((id.x+0.5) / BUFFER_WIDTH, (i+0.5) / COLOR_HEIGHT));
-				is_focus = inFocus(colortable[i + tid.x*COLOR_HEIGHT], scenedepth);
+				is_focus = inFocus(colortable[i + tid.x*COLOR_HEIGHT], scenedepth, float2((id.x + 0.5) / BUFFER_WIDTH, (i + 0.5) / COLOR_HEIGHT));
 
 				if (!(is_focus && was_focus))
 					maskval++;
@@ -400,7 +428,7 @@ namespace primitiveColor
 	{
 		fragment = tex2D(ReShade::BackBuffer, texcoord);
 		float fragment_depth = ReShade::GetLinearizedDepth(texcoord);
-		fragment = inFocus(fragment, fragment_depth) ? tex2D(SamplerColorSort, texcoord) : fragment;
+		fragment = inFocus(fragment, fragment_depth, texcoord) ? tex2D(SamplerColorSort, texcoord) : fragment;
 		fragment = (ShowSelectedHue*FilterColor) ? showHue(texcoord, fragment) : fragment;
 	}
 
