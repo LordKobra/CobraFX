@@ -1,6 +1,7 @@
 /////////////////////////////////////////////////////////
 // ColorSort.fx by SirCobra
-// Version 0.1
+// Version 0.2
+// You can find info and my repository here: https://github.com/LordKobra/CobraFX
 // currently resource-intensive
 // This compute shader only runs on the ReShade 4.8 Beta and DX11+ or newer OpenGL games.
 // This effect does sort all colors on a vertical line by brightness.
@@ -17,96 +18,109 @@
 //
 // UI
 //
+
 uniform bool ReverseSort <
 	ui_tooltip = "While active, it orders from dark to bright, top to bottom. Else it will sort from bright to dark.";
 > = false;
 uniform bool FilterColor <
 	ui_tooltip = "Activates the color filter option.";
 > = false;
+uniform bool ShowSelectedHue <
+	ui_tooltip = "Display the current selected hue range on the top of the image.";
+> = false;
 uniform float Value <
 	ui_type = "drag";
-ui_min = 0.000; ui_max = 1.000;
-ui_step = 0.001;
-ui_tooltip = "The Value describes the brightness of the hue. 0 is black/no hue and 1 is maximum hue(e.g. pure red).";
+	ui_min = 0.000; ui_max = 1.000;
+	ui_step = 0.001;
+	ui_tooltip = "The Value describes the brightness of the hue. 0 is black/no hue and 1 is maximum hue(e.g. pure red).";
 > = 1.0;
 uniform float ValueRange <
 	ui_type = "drag";
-ui_min = 0.000; ui_max = 1.000;
-ui_step = 0.001;
-ui_tooltip = "The tolerance around the value.";
+	ui_min = 0.000; ui_max = 1.000;
+	ui_step = 0.001;
+	ui_tooltip = "The tolerance around the value.";
 > = 1.0;
 uniform float Hue <
 	ui_type = "drag";
-ui_min = 0.000; ui_max = 1.000;
-ui_step = 0.001;
-ui_tooltip = "The hue describes the color category. It can be red, green, blue or a mix of them.";
+	ui_min = 0.000; ui_max = 1.000;
+	ui_step = 0.001;
+	ui_tooltip = "The hue describes the color category. It can be red, green, blue or a mix of them.";
 > = 1.0;
 uniform float HueRange <
 	ui_type = "drag";
-ui_min = 0.000; ui_max = 1.000;
-ui_step = 0.001;
-ui_tooltip = "The tolerance around the hue.";
+	ui_min = 0.000; ui_max = 1.000;
+	ui_step = 0.001;
+	ui_tooltip = "The tolerance around the hue.";
 > = 1.0;
 uniform float Saturation <
 	ui_type = "drag";
-ui_min = 0.000; ui_max = 1.000;
-ui_step = 0.001;
-ui_tooltip = "The saturation determins the colorfulness. 0 is greyscale and 1 pure colors.";
+	ui_min = 0.000; ui_max = 1.000;
+	ui_step = 0.001;
+	ui_tooltip = "The saturation determins the colorfulness. 0 is greyscale and 1 pure colors.";
 > = 1.0;
 uniform float SaturationRange <
 	ui_type = "drag";
-ui_min = 0.000; ui_max = 1.000;
-ui_step = 0.001;
-ui_tooltip = "The tolerance around the saturation.";
+	ui_min = 0.000; ui_max = 1.000;
+	ui_step = 0.001;
+	ui_tooltip = "The tolerance around the saturation.";
 > = 1.0;
 uniform bool FilterDepth <
 	ui_tooltip = "Activates the depth filter option.";
 > = false;
 uniform float FocusDepth <
 	ui_type = "drag";
-ui_min = 0.000; ui_max = 1.000;
-ui_step = 0.001;
-ui_tooltip = "Manual focus depth of the point which has the focus. Range from 0.0, which means camera is the focus plane, till 1.0 which means the horizon is focus plane.";
+	ui_min = 0.000; ui_max = 1.000;
+	ui_step = 0.001;
+	ui_tooltip = "Manual focus depth of the point which has the focus. Range from 0.0, which means camera is the focus plane, till 1.0 which means the horizon is focus plane.";
 > = 0.026;
 uniform float FocusRangeDepth <
 	ui_type = "drag";
-ui_min = 0.0; ui_max = 1.000;
-ui_step = 0.001;
-ui_tooltip = "The depth of the range around the manual focus depth which should be emphasized. Outside this range, de-emphasizing takes place";
+	ui_min = 0.0; ui_max = 1.000;
+	ui_step = 0.001;
+	ui_tooltip = "The depth of the range around the manual focus depth which should be emphasized. Outside this range, de-emphasizing takes place";
 > = 0.001;
+
 #include "Reshade.fxh"
-namespace primitiveColor
-{
 #ifndef COLOR_HEIGHT
 #define COLOR_HEIGHT	640 //maybe needs multiple of 64 :/
 #endif
 #ifndef THREAD_HEIGHT
 #define THREAD_HEIGHT	16 // 2^n
 #endif
+
+namespace primitiveColor
+{
 	//
 	// textures
 	//
+
 	texture texHalfRes{ Width = BUFFER_WIDTH; Height = COLOR_HEIGHT; Format = RGBA16F; };
 	texture texColorSort{ Width = BUFFER_WIDTH; Height = COLOR_HEIGHT; Format = RGBA16F; };
 	storage texColorSortStorage{ Texture = texColorSort; };
+
 	//
 	// samplers
 	//
+
 	sampler2D SamplerHalfRes{ Texture = texHalfRes; };
 	sampler2D SamplerColorSort{ Texture = texColorSort; };
+
 	//
 	// code
 	//
+
 	bool min_color(float4 a, float4 b)
 	{
 		float val = b.a - a.a; // val > 0 for a smaller
 		val = (abs(val) < 0.1) ? ((a.r + a.g + a.b) - (b.r + b.g + b.b))*(1-ReverseSort-ReverseSort) : val;
 		return (val < 0) ? false : true; // Returns False if a smaller, yes its weird
 	}
+
 	float3 mod(float3 x, float y) //x - y * floor(x/y).
 	{
 		return x - y * floor(x / y);
 	}
+
 	//HSV functions from iq (https://www.shadertoy.com/view/MsS3Wc)
 	float4 hsv2rgb(float4 c)
 	{
@@ -116,6 +130,7 @@ namespace primitiveColor
 
 		return float4(c.z * lerp(float3(1.0,1.0,1.0), rgb, c.y),1.0);
 	}
+
 	//From Sam Hocevar: http://lolengine.net/blog/2013/07/27/rgb-to-hsv-in-glsl
 	float4 rgb2hsv(float4 c)
 	{
@@ -127,6 +142,22 @@ namespace primitiveColor
 		float e = 1.0e-10;
 		return float4(abs(q.z + (q.w - q.y) / (6.0 * d + e)), d / (q.x + e), q.x,1.0);
 	}
+
+	// show the color bar. inspired by originalcodrs design
+	float4 showHue(float2 texcoord, float4 fragment)
+	{
+		float range = 0.145;
+		float depth = 0.06;
+		if (abs(texcoord.x - 0.5) < range && texcoord.y < depth)
+		{
+			float4 hsvval = float4(saturate(texcoord.x - 0.5 + range) / (2 * range), 1, 1, 1);
+			float4 rgbval = hsv2rgb(hsvval);
+			bool active = min(abs(hsvval.r - Hue), (1 - abs(hsvval.r - Hue))) < HueRange;
+			fragment = active ? rgbval : float4(0.5, 0.5, 0.5, 1);
+		}
+		return fragment;
+	}
+
 	bool inFocus(float4 rgbval, float scenedepth)
 	{
 		//colorfilter
@@ -138,9 +169,10 @@ namespace primitiveColor
 		//depthfilter
 		bool is_depth_focus = (abs(scenedepth - FocusDepth) < FocusRangeDepth) || FilterDepth == 0;
 		return is_color_focus && is_depth_focus;
-
 	}
+
 	groupshared float4 colortable[2 * COLOR_HEIGHT];
+
 	void merge_sort(int low, int high, int em)
 	{
 		float4 temp[COLOR_HEIGHT / THREAD_HEIGHT];
@@ -177,9 +209,11 @@ namespace primitiveColor
 			}
 		}
 	}
+
 	// passes
 	groupshared int evenblock[2 * THREAD_HEIGHT];
 	groupshared int oddblock[2 * THREAD_HEIGHT];
+
 	void sort_color(uint3 id : SV_DispatchThreadID, uint3 tid : SV_GroupThreadID)
 	{
 		int row = tid.y*COLOR_HEIGHT / THREAD_HEIGHT;
@@ -195,7 +229,7 @@ namespace primitiveColor
 			for (i = 0; i < COLOR_HEIGHT; i++)
 			{
 				colortable[i + tid.x*COLOR_HEIGHT] = tex2Dfetch(SamplerHalfRes, int4(id.x, i, 0, 0));
-				float scenedepth = ReShade::GetLinearizedDepth(float2(float(id.x) / BUFFER_WIDTH, float(i) / COLOR_HEIGHT));
+				float scenedepth = ReShade::GetLinearizedDepth(float2((id.x+0.5) / BUFFER_WIDTH, (i+0.5) / COLOR_HEIGHT));
 				is_focus = inFocus(colortable[i + tid.x*COLOR_HEIGHT], scenedepth);
 
 				if (!(is_focus && was_focus))
@@ -356,16 +390,20 @@ namespace primitiveColor
 			tex2Dstore(texColorSortStorage, float2(id.x, row + i), float4(colortable[row + i + tid.x*COLOR_HEIGHT]));
 		}
 	}
+
 	void half_color(float4 vpos : SV_Position, float2 texcoord : TEXCOORD, out float4 fragment : SV_Target)
 	{
 		fragment = tex2D(ReShade::BackBuffer, texcoord);
 	}
+
 	void downsample_color(float4 vpos : SV_Position, float2 texcoord : TEXCOORD, out float4 fragment : SV_Target)
 	{
 		fragment = tex2D(ReShade::BackBuffer, texcoord);
 		float fragment_depth = ReShade::GetLinearizedDepth(texcoord);
 		fragment = inFocus(fragment, fragment_depth) ? tex2D(SamplerColorSort, texcoord) : fragment;
+		fragment = (ShowSelectedHue*FilterColor) ? showHue(texcoord, fragment) : fragment;
 	}
+
 	//Pipeline
 	technique ColorSort
 	{
