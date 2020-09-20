@@ -22,6 +22,18 @@ ui_tooltip = "Click to start the Exposure Process. It will run for the given amo
 uniform bool ShowGreenOnFinish <
 	ui_tooltip = "Display a green dot at the top to signalize the exposure has finished and entered preview mode.";
 > = false;
+uniform float ISO <
+	ui_type = "drag";
+ui_min = 100; ui_max = 1600;
+ui_step = 1;
+ui_tooltip = "ISO. 100 is normalized to the game. 1600 is 16 times the sensitivity.";
+> = 100;
+uniform float Threshold <
+	ui_type = "drag";
+ui_min = 0; ui_max = 1;
+ui_step = 0.001;
+ui_tooltip = "Disables ISO scaling for values below Threshold to avoid average game brightness to bleed into the long exposure. 0 means black, 1 is white (maximum luminosity).";
+> = 0;
 
 #include "Reshade.fxh"
 
@@ -68,13 +80,22 @@ namespace RealisticLongExposure {
 		return fragment;
 
 	}
+	float4 getExposure(float4 rgbval, bool e)
+	{   
+		float brightness = (rgbval.r + rgbval.g + rgbval.b) / 3;
+		float enc = (brightness > Threshold) ? ISO/100 : 1;
+		float dec = 1;
+		rgbval.rgb = e ? enc*rgbval.rgb/14400 : dec*rgbval.rgb;
+		return rgbval;
+
+	}
 	void long_exposure(float4 vpos : SV_Position, float2 texcoord : TEXCOORD, out float4 fragment : SV_Target)
 	{
 		float start_time = decodeTimer(tex2D(samplerTimer, float2(0.25,0.5)).r);
 		float framecounter = decodeTimer(tex2D(samplerTimer, float2(0.75, 0.5)).r);
 		float4 rgbval = tex2D(ReShade::BackBuffer, texcoord);
 		fragment = tex2D(samplerExposureCopy, texcoord);
-		rgbval = rgbval / 14400;
+		rgbval = getExposure(rgbval, true); //rgbval / 14400 * ((ISO-100) / 100 +1);//(pow(2.71828,(rgbval.r+rgbval.g+rgbval.b/768))-1);
 		// during exposure
 		// active: add rgb
 		// inactive: keep current
@@ -135,6 +156,7 @@ namespace RealisticLongExposure {
 		if (StartExposure && framecounter)
 		{
 			result.rgb = exposure_rgb.rgb * (14400 / framecounter);
+			result = getExposure(result, false);
 		}
 		else
 		{
