@@ -140,7 +140,7 @@ namespace RealisticLongExposure {
 		{
 			result = game_rgb;
 		}
-		fragment = (ShowGreenOnFinish*StartExposure*(timer-start_time > 1000* RealExposureDuration)) ? show_green(texcoord, result) : result;
+		fragment = ((int)ShowGreenOnFinish*(int)StartExposure*(int)(timer-start_time > 1000* RealExposureDuration)) ? show_green(texcoord, result) : result;
 	}
 
 	technique RealLongExposure
