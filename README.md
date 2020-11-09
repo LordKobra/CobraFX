@@ -1,7 +1,7 @@
 # CobraFX
 My shaders for ReShade are saved here.
 
-Please read this first: All my compute shaders (currently computeGravity.fx and Colorsort.fx) only work inside the current ReShade Beta you can build yourself as described here: https://github.com/crosire/reshade#building
+Please read this first: All my compute shaders (currently computeGravity.fx and Colorsort.fx) only work with ReShade 4.8 or newer!
 Also compute shaders do not work with DirectX 10 or lower and some older OpenGL versions.
 
 
