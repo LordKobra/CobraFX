@@ -256,7 +256,7 @@ namespace primitiveColor
 			int maskval = 0;
 			for (i = 0; i < COLOR_HEIGHT; i++)
 			{
-				colortable[i + tid.x*COLOR_HEIGHT] = tex2Dfetch(SamplerHalfRes, int4(id.x, i, 0, 0));
+				colortable[i + tid.x*COLOR_HEIGHT] = tex2Dfetch(SamplerHalfRes, int2(id.x, i));
 				float scenedepth = ReShade::GetLinearizedDepth(float2((id.x+0.5) / BUFFER_WIDTH, (i+0.5) / COLOR_HEIGHT));
 				is_focus = inFocus(colortable[i + tid.x*COLOR_HEIGHT], scenedepth, float2((id.x + 0.5) / BUFFER_WIDTH, (i + 0.5) / COLOR_HEIGHT));
 
