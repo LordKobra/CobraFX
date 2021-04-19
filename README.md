@@ -17,4 +17,4 @@ Don't forget to include the texture inside the Textures folder!
 **Colorsort.fx** is a compute shader, which sorts colors from brightest to darkest. You can filter the selection by depth and color.
 
 
-**realLongExposure.fx** is a shader, which enables you to capture changes over time, like in long-exposure photography. It does only work for a fixed time interval. For continuous effects make sure to also check out the old LongExposure.fx which fakes the effect or Trails.fx by BlueSkyDefender for similar brightness results with improved smoothness and depth effects: https://github.com/BlueSkyDefender/Depth3D/blob/master/Shaders/Others/Trails.fx .
+**realLongExposure.fx** is a shader, which enables you to capture changes over time, like in long-exposure photography. It does only work for a fixed time interval. For continuous effects make sure to also check out the old LongExposure.fx which fakes the effect or Trails.fx by BlueSkyDefender for similar brightness results with improved smoothness and depth effects: https://github.com/BlueSkyDefender/AstrayFX/blob/master/Shaders/Trails.fx .
