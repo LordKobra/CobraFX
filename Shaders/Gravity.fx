@@ -188,15 +188,15 @@ namespace alt {
 	// Applies Gravity to the Pixels recursively
 	float4 Gravity_main(float4 vpos, float2 texcoord : TEXCOORD)
 	{
-		float real_max_distance = tex2Dfetch(SamplerGravityDistanceMap, vpos.xyww).r;
+		float real_max_distance = tex2Dfetch(SamplerGravityDistanceMap, vpos.xy).r;
 		int iterations = round(real_max_distance * BUFFER_HEIGHT);
 
 		vpos.z = 0;
 		float4 sample_pos = vpos;
-		for (float depth = tex2Dfetch(SamplerGravityBuf, vpos.xyww).x;
+		for (float depth = tex2Dfetch(SamplerGravityBuf, vpos.xy).x;
 			vpos.z < iterations; ++vpos.z, --vpos.y)
 		{
-			float4 samp = tex2Dfetch(SamplerGravityBuf, vpos.xyww);
+			float4 samp = tex2Dfetch(SamplerGravityBuf, vpos.xy);
 			samp.w *= samp.z;
 
 			[flatten]
@@ -207,13 +207,13 @@ namespace alt {
 			}
 		}
 
-		float4 colFragment = tex2Dfetch(ReShade::BackBuffer, sample_pos.xyww);
+		float4 colFragment = tex2Dfetch(ReShade::BackBuffer, sample_pos.xy);
 		return lerp(colFragment, float4(BlendColor, 1.0), sample_pos.z * EffectFactor);
 	}
 
 	float rng_delta()
 	{
-		float2 old_rng = tex2Dfetch(SamplerGravityCurrentSeed, (0).xxxx).x;
+		float2 old_rng = tex2Dfetch(SamplerGravityCurrentSeed, (0).xx).x;
 		float new_rng = GravityRNG + useImage * 0.01 + GravityIntensity;
 		return old_rng.x - new_rng;
 	}
