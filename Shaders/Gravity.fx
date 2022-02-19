@@ -13,6 +13,15 @@
 // Thanks to FransBouma, Lord of Lunacy and Annihlator for advise on my first shader :)
 /////////////////////////////////////////////////////////
 
+//render targets don't work with dx9
+#if (__RENDERER__ >= 0xa000)
+	#define GRAVITY_COMPUTE 1
+#else
+	#define GRAVITY_COMPUTE 0
+#endif
+
+#if GRAVITY_COMPUTE != 0
+
 //
 // UI
 //
@@ -307,3 +316,5 @@ namespace alt {
 	Then we update the current settings. Only if the settings change the above steps have to be executed again.
 	Then we apply Gravity including the DepthMap and colours.
 */
+
+#endif // Shader End
