@@ -25,7 +25,7 @@ It runs slower on normal resolutions, but a lot faster than Gravity.fx on higher
 
 To increase performance, you can lower the `Gravity Intensity` slider or change the `GRAVITY_HEIGHT` preprocessor parameter. This parameter controls the resolution of the effect along the gravitational axis. At lower resolutions, you gain performance at the cost of visual fidelity.
 
-<p align="center"><img src="https://cdn.discordapp.com/attachments/995429348637167646/1169987517987164260/Mirrors_Edge_Screenshot_2023.11.03_-_14.04.41.07.png?ex=655766c9&is=6544f1c9&hm=6448f13ca90256be88af0f009616fb7904403bd617c82636b52dc55ec8d55221&">
+<p align="center"><img src="https://steamuserimages-a.akamaihd.net/ugc/2211891143717971238/788332FFE4A2D435226CC78DB0083018A79F1BCA/?imw=5000&imh=5000&ima=fit&impolicy=Letterbox&imcolor=%23000000&letterbox=false">
 <i>Gravity in action</i></p>
 
 ## Color Sort
@@ -34,7 +34,7 @@ To increase performance, you can lower the `Gravity Intensity` slider or change 
 
 The shader consumes a lot of resources. To balance between quality and performance,
 adjust the preprocessor parameter `COLOR_HEIGHT`. `COLOR_HEIGHT` (default value: 10) multiplied by 64 defines the resolution of the effect along the sorting axis. The value needs to be integer. Smaller values give performance at cost of visual fidelity. 8: Performance, 10: Default, 12: Good, 14: High
-<p align="center"><img src="https://cdn.discordapp.com/attachments/549986930071175169/1168953753622294558/The_Witcher_3_Screenshot_2023.10.31_-_17.33.41.22.png?ex=6553a404&is=65412f04&hm=fafe5566b5f2a34f9d79dc65fcee61d4a06a4427d9458d283c2ff1734813f9d4&">
+<p align="center"><img src="https://steamuserimages-a.akamaihd.net/ugc/2211891143717969404/901098AE55686B343FE6A564ED207A82951C9CC0/?imw=5000&imh=5000&ima=fit&impolicy=Letterbox&imcolor=%23000000&letterbox=false">
 <i>Color Sort in action</i></p>
 
 ## Realistic Long-Exposure
@@ -52,7 +52,7 @@ Tip: Right-click the `Start Exposure` button to bind this functionality to a hot
 
 **Droste.fx** warps the image-space to recursively appear within itself. It features a circular and rectangular shape and can be applied as continuous spiral.
 
-<p align="center"><img src="https://cdn.discordapp.com/attachments/995429348637167646/1169995170717122701/Mirrors_Edge_Screenshot_2023.11.03_-_14.42.37.79.png?ex=65576dea&is=6544f8ea&hm=9a681c8760111a87c96ea34aa03ee8d6a7ebd2c4c9138662119e18255b4b98db&">
+<p align="center"><img src="https://steamuserimages-a.akamaihd.net/ugc/2211891143717972112/F25CFC9B4359AA8D5B22B7C28600535DEFAEB060/?imw=5000&imh=5000&ima=fit&impolicy=Letterbox&imcolor=%23000000&letterbox=false">
 <i>Droste Effect in action</i></p>
 
 ## Cobra Mask
@@ -62,7 +62,7 @@ Tip: Right-click the `Start Exposure` button to bind this functionality to a hot
 This shader works the following way: In the effect window, you put "Cobra Mask: Start" above, and "Cobra Mask: Finish" below the shaders you want to be affected by the mask. When you turn it on, the effects in between will only affect the part of the screen with the correct color and depth. This effect adapts to the current scene. If you need to cover a fixed area of the screen, like the game UI, check out [UI Mask](https://github.com/crosire/reshade-shaders/blob/slim/Shaders/UIMask.fx).
 
 
-<p align="center"><img src="https://cdn.discordapp.com/attachments/995429348637167646/1171579925749309570/MirrorsEdge_2023-11-07_23-34-53.png?ex=655d31d5&is=654abcd5&hm=3bdb05db0259f3ccc63ff1bab8a28c007d5a4d63679617b566c126091556adb2&">
+<p align="center"><img src="https://steamuserimages-a.akamaihd.net/ugc/2211891143717972938/5D512DCDB800A2A3AC3329238660685A5CC12E26/?imw=5000&imh=5000&ima=fit&impolicy=Letterbox&imcolor=%23000000&letterbox=false">
 <i> Cobra Mask applying the <a href="https://github.com/Daodan317081/reshade-shaders">Comic.fx</a> debug layer to the foreground</i>
 </p>
 
