@@ -5,8 +5,8 @@ CobraFX comprises SirCobra's contribution of shaders for [ReShade](https://githu
 
 ### Requirements
 
->**Note**
->Important! All compute shaders (filename has "_CS"-Suffix) only work with ReShade 4.8 or newer, DirectX 11 or newer, OpenGL 4.3 or newer and Vulkan!
+>[!IMPORTANT]
+>All compute shaders (filename has "_CS"-Suffix) only work with ReShade 4.8 or newer, DirectX 11 or newer, OpenGL 4.3 or newer and Vulkan!
 
 
 >**Note**
