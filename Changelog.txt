@@ -1,0 +1,53 @@
+CobraMask.fx
+
+        0.2.1   2023-11-08
+                - huge code reformatting (can break presets)
+                - improved tooltips
+                - renamed from "Cobra_Mask.fx" to "CobraMask.fx" (can break presets too)
+                - hsv2rgb function changed
+
+ColorSort_CS.fx
+
+        0.5.1   2023-11-08
+                - huge code reformatting (can break presets)
+                - improved tooltips
+                - renamed from "ColorSort.fx" to "ColorSort_CS.fx" (can break presets too)
+                - renamed texture "colorsort_noise.png" to "uniform_noise.png"
+                - fixed bug causing effect to crash if "NoDebugInfo=1" was set in the ReShade.ini
+
+Droste.fx
+
+        0.4.1   2023-11-08
+                - huge code reformatting (can break presets)
+                - complete rewrite of the main function results in
+                        - less unwanted distortions
+                        - better off-center effect
+                        - automatic aspect-ratio adjustment
+
+Gravity.fx
+
+        0.2.1   2023-11-08
+                - huge code reformatting (can break presets)
+                - improved tooltips
+
+Gravity_CS.fx
+
+        0.2.1   2023-11-08
+                - huge code reformatting (can break presets)
+                - improved tooltips
+                - renamed from "computeGravity.fx" to "Gravity_CS.fx" (can break presets too)
+                - fixed bug causing effect to disappear when tint-intensity was set to 0
+
+RealLongExposure.fx
+
+        0.4.1   2023-11-08
+                - huge code reformatting (can break presets)
+                - improved tooltips
+                - fixed bug causing aliasing on high resolutions
+
+        0.4.0   2022-02-06
+                - fixed ReShade 5.0 compability
+
+Outdated shaders (LongExposure.fx)
+        0.1.1   2023-11-08
+                - huge code reformatting (can break presets)

@@ -1,196 +1,198 @@
 ////////////////////////////////////////////////////////////////////////////////////////////////////////
-// Droste.fx by SirCobra
-// Version 0.4
-// You can find info and my repository here: https://github.com/LordKobra/CobraFX
-// This effect warps space inside itself.
+// Droste Effect (Droste.fx) by SirCobra
+// Version 0.4.1
+// You can find info and all my shaders here: https://github.com/LordKobra/CobraFX
+//
+// --------Description---------
+// The Droste effect warps the image-space to recursively appear within itself.
 ////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-
 ////////////////////////////////////////////////////////////////////////////////////////////////////////
-//***************************************                  *******************************************//
-//***************************************   UI & Defines   *******************************************//
-//***************************************                  *******************************************//
+//
+//                                            Defines & UI
+//
 ////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 // Shader Start
+// Defines
+
+#define COBRA_DRO_VERSION "0.4.1"
+#define COBRA_DRO_UI_GENERAL "\n / General Options /\n"
+
+#ifndef M_PI
+    #define M_PI 3.1415927
+#endif
+
+#ifndef M_E
+    #define M_E 2.71828183
+#endif
+
+// Includes
+
 #include "Reshade.fxh"
 
-// Namespace everything
-namespace Droste
+// Namespace Everything!
+
+namespace COBRA_DRO
 {
+    // UI
 
-	//defines
-	#define MASKING_M   "General Options\n"
+    uniform int UI_EffectType <
+        ui_label     = " Effect Type";
+        ui_type      = "radio";
+        ui_spacing   = 2;
+        ui_items     = "Circular\0Rectangular\0";
+        ui_tooltip   = "Shape of the recursive appearance.";
+        ui_category  = COBRA_DRO_UI_GENERAL;
+    >                = 0;
 
-	#ifndef M_PI
-		#define M_PI 3.1415927
-	#endif
-	#ifndef M_E
-		#define M_E 2.71828183
-	#endif
+    uniform bool UI_Spiral <
+        ui_label     = " Spiral";
+        ui_spacing   = 2;
+        ui_tooltip   = "Warp space into a spiral.";
+        ui_category  = COBRA_DRO_UI_GENERAL;
+    >                = true;
 
-	//ui
-	uniform int Buffer1 <
-		ui_type = "radio"; ui_label = " ";
-	>;	
-	uniform int EffectType <
-		ui_type = "radio";
-		ui_items = "Hyperdroste\0Droste\0";
-		ui_label = "Effect Type";
-		ui_category = MASKING_M;
-	> = 0;
-	uniform bool Spiral <
-		ui_tooltip = "Warp space into a spiral.";
-		ui_category = MASKING_M;
-	> = true;
-	uniform float InnerRing <
-		ui_type = "slider";
-		ui_min = 0.00; ui_max = 1;
-		ui_step = 0.01;
-		ui_tooltip = "The inner ring defines the texture border towards the center of the screen.";
-		ui_category = MASKING_M;
-	> = 0.3;
-    uniform float OuterRing <
-		ui_type = "slider";
-		ui_min = 0.0; ui_max = 1;
-		ui_step = 0.01;
-		ui_tooltip = "The outer ring defines the texture border towards the edge of the screen.";
-		ui_category = MASKING_M;
-	> = 1.0;
-	uniform float Zoom <
-		ui_type = "slider";
-		ui_min = 0.0; ui_max = 9.9;
-		ui_step = 0.01;
-		ui_tooltip = "Zoom in the output.";
-		ui_category = MASKING_M;
-	> = 1.0;
-		uniform float Frequency <
-		ui_type = "slider";
-		ui_min = 0.1; ui_max = 10;
-		ui_step = 0.01;
-		ui_tooltip = "Defines the frequency of the intervals.";
-		ui_category = MASKING_M;
-	> = 1.0;
-	uniform float X_Offset <
-		ui_type = "slider";
-		ui_min = -0.5; ui_max = 0.5;
-		ui_step = 0.01;
-		ui_tooltip = "Change the X position of the center. Keep it to 0 to get the best results. ";
-		ui_category = MASKING_M;
-	> = 0.0;
-	uniform float Y_Offset <
-		ui_type = "slider";
-		ui_min = -0.5; ui_max = 0.5;
-		ui_step = 0.01;
-		ui_tooltip = "Change the Y position of the center. Keep it to 0 to get the best results.";
-		ui_category = MASKING_M;
-	> = 0.0;
-	uniform int Buffer4 <
-		ui_type = "radio"; ui_label = " ";
-	>;
+    uniform float UI_OuterRing <
+        ui_label     = " Outer Ring Size";
+        ui_type      = "slider";
+        ui_min       = 0.00;
+        ui_max       = 1.00;
+        ui_step      = 0.01;
+        ui_tooltip   = "The outer ring defines the texture border towards the edge of the screen.";
+        ui_category  = COBRA_DRO_UI_GENERAL;
+    >                = 1.00;
 
+    uniform float UI_Zoom <
+        ui_label     = " Zoom";
+        ui_type      = "slider";
+        ui_min       = 0.00;
+        ui_max       = 9.90;
+        ui_step      = 0.01;
+        ui_tooltip   = "Zoom into the output.";
+        ui_category  = COBRA_DRO_UI_GENERAL;
+    >                = 1.00;
+
+    uniform float UI_Frequency <
+        ui_label     = " Frequency";
+        ui_type      = "slider";
+        ui_min       = 0.10;
+        ui_max       = 5.00;
+        ui_step      = 0.01;
+        ui_tooltip   = "Defines the frequency of the recursion.";
+        ui_category  = COBRA_DRO_UI_GENERAL;
+    >                = 1.00;
+
+    uniform float UI_X_Offset <
+        ui_label     = " Center Horizontal Offset";
+        ui_type      = "slider";
+        ui_min       = -0.50;
+        ui_max       = 0.50;
+        ui_step      = 0.01;
+        ui_tooltip   = "Change the horizontal position of the center. Keep it at 0 to get the best results.";
+        ui_category  = COBRA_DRO_UI_GENERAL;
+    >                = 0.00;
+
+    uniform float UI_Y_Offset <
+        ui_label     = " Center Vertical Offset";
+        ui_type      = "slider";
+        ui_min       = -0.50;
+        ui_max       = 0.50;
+        ui_step      = 0.01;
+        ui_tooltip   = "Change the Y position of the center. Keep it at 0 to get the best results.";
+        ui_category  = COBRA_DRO_UI_GENERAL;
+    >                = 0.00;
+
+    uniform int UI_BufferEnd <
+        ui_type     = "radio";
+        ui_spacing  = 2;
+        ui_text     = " Shader Version: " COBRA_DRO_VERSION;
+        ui_label    = " ";
+    > ;
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////
-    //***************************************                  *******************************************//
-    //*************************************** Helper Functions *******************************************//
-    //***************************************                  *******************************************//
+    //
+    //                                           Helper Functions
+    //
     ////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+    // normal fmod
+    float mod(float x, float y)
+    {
+        return x - y * floor(x / y);
+    }
 
-	//vector mod and normal fmod
-	float mod(float x, float y) 
-	{
-		return x - y * floor(x / y);
-	}
-
+    // return value -M_PI ~ M_PI
     float atan2_approx(float y, float x)
     {
-		return acos(x * rsqrt(y * y + x * x)) * (y < 0 ? -1 : 1);
-	}
-
+        return acos(x * rsqrt(y * y + x * x)) * (y < 0 ? -1 : 1);
+    }
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////
-    //***************************************                  *******************************************//
-    //***************************************      Effect      *******************************************//
-    //***************************************                  *******************************************//
+    //
+    //                                              Shaders
+    //
     ////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+    void PS_Droste(float4 vpos : SV_Position, float2 texcoord : TEXCOORD, out float4 fragment : SV_Target)
+    {
+        // transform coordinate system
+        const float2 AR     = UI_EffectType == 0 ? float2(float(BUFFER_WIDTH) / BUFFER_HEIGHT, 1.0) : float2(1.0, 1.0);
+        const float2 OFFSET = float2(UI_X_Offset, UI_Y_Offset);
+        float2 new_pos      = (texcoord - 0.5 + OFFSET) * AR;
 
-	void droste(float4 vpos : SV_Position, float2 texcoord : TEXCOORD, out float4 fragment : SV_Target)
-	{
-		//transform coordinate system
-		float ar = float(BUFFER_WIDTH) / BUFFER_HEIGHT;
-		ar = EffectType == 0 ? ar : 1;
-		float new_x = (texcoord.x - 0.5 + X_Offset) * (EffectType == 0 ? ar : 1);
-		float new_y = (texcoord.y - 0.5 + Y_Offset);
+        // calculate orientation of center and pixel
+        const float NEW_CENTER_DISTANCE = 2.0 * (0.5 - max(abs(OFFSET.x), abs(OFFSET.y)));
+        const float NEW_CENTER_ANGLE    = abs(OFFSET.x) + abs(OFFSET.y) < 0.01 ? 1 : (atan2_approx(-OFFSET.x * AR.x, -OFFSET.y) + M_PI) / (2 * M_PI);
+        float angle                     = (atan2_approx(new_pos.x, new_pos.y) + M_PI) / (2 * M_PI);
+        angle                           = 1 - mod(abs(abs(angle - NEW_CENTER_ANGLE) - 0.5), 0.5) * 2;
 
-		//calculate and normalize angle
-		float val = atan2_approx(new_x, new_y) + M_PI;
-		val /= 2 * M_PI;
-		val = Spiral ? val : 0;
+        //smooth off-center projection
+        float angle_smooth = (1 - cos(angle * angle * M_PI)) / 2;
+        float intensity    = angle_smooth + (1 - angle_smooth) * NEW_CENTER_DISTANCE;
 
-		//calculate distance from center
-		float hyperdroste = val + log(sqrt(new_x * new_x + new_y * new_y) * (10 - Zoom)) * Frequency;
-		float droste = val + log(max(abs(new_x), abs(new_y)) * (10 - Zoom)) * Frequency;
-		val = EffectType == 0 ? hyperdroste : droste;
-		val = (exp(mod(val, 1)) - 1) / (M_E - 1);
+        // calculate and normalize angle
+        float val = atan2_approx(new_pos.x, new_pos.y) + M_PI;
+        val      /= 2 * M_PI;
+        val       = UI_Spiral ? val : 0;
 
-		//fix distortion
-		const float y_top = 0.5;
-		const float y_bottom = -0.5;
-		const float x_right = 0.5;
-		const float x_left = -0.5;
-		//ar normalized towards projection borders
-		float nny = (new_y < 0) ? y_bottom / new_y : y_top / new_y;
-		float nnx = (new_x < 0) ? x_left * ar / new_x : x_right * ar / new_x; // überleeeegeeeen! Concept: AR+fixed Offset works?
-		float nnc = min(nnx, nny);
-		float normalized_x = new_x * nnc + X_Offset * ar;
-		float normalized_y = new_y * nnc + Y_Offset;
-		float d_normal_2 = sqrt((normalized_x - X_Offset * ar) * (normalized_x - X_Offset * ar) + (normalized_y - Y_Offset) * (normalized_y - Y_Offset)); //ar normalized
+        // calculate distance from center
+        float cicle_dist = val + log(sqrt(new_pos.x * new_pos.x + new_pos.y * new_pos.y) / intensity * (10 - UI_Zoom)) * UI_Frequency;
+        float rect_dist  = val + log(max(abs(new_pos.x), abs(new_pos.y)) * (10 - UI_Zoom)) * UI_Frequency;
+        val              = UI_EffectType == 0 ? cicle_dist : rect_dist;
+        val              = (exp(mod(val, 1) / UI_Frequency) - 1) / (exp(1 / UI_Frequency) - 1);
 
-		//rounding screencentered borders
-		float d_left = x_left + X_Offset;
-		float d_right = x_right + X_Offset;
-		float d_top = y_top + Y_Offset;
-		float d_bottom = y_bottom + Y_Offset;
-		float d_x = (new_x < 0) ? d_left * ar / new_x : d_right * ar / new_x;
-		float d_y = (new_y < 0) ? d_bottom / new_y : d_top / new_y;
-		//radial interpolation
-		float xclose = d_x * new_x;
-		float yclose = d_y * new_y;
-		float ri = (abs(new_x * xclose) + abs(new_y * yclose)) / (abs(new_x) + abs(new_y)) / 0.5;
-		//float tannorm = abs(mod((atan2_approx(new_x,new_y)+M_PI)/(2*M_PI)+(atan2_approx(X_Offset,-Y_Offset)+M_PI)/(2*M_PI)+0.5,1)-0.5);
-		//ri = 0.5*tannorm; Pretty idea, looks bad
-		nnc = min(d_x, d_y);
-		float nx_2 = new_x * nnc;
-		float ny_2 = new_y * nnc;
-		float aar = saturate(ri - 0.4) + 0.15; //saturate((sqrt(nx_2 * nx_2 + ny_2 * ny_2)) / d_normal_2+0.15); // TODO: remove shitty version and make it usable with a smooth one
-		float r = aar;						   // TODO: smaller r reduces visual look although it should increase it - fix one day
-		float arr = (1 - r) * ar + r;
-		float d_final = sqrt(new_x * new_x + new_y * new_y) / pow(pow(abs(new_x) / arr * 2, 2.0 / r) + pow(abs(new_y) * 2, 2.0 / r), r / 2.0);
-		//TODO: See if the projection is correct in projectionspace (it once worked in screenspace, so fix it!!!!)
-		float buffer_len = d_normal_2;
-		//TODO: fix rectangle distortions
-		float scale_normal = d_final / buffer_len;
-		normalized_x = EffectType == 0 ? (normalized_x - X_Offset * ar) * scale_normal / ar + X_Offset : normalized_x; //here we leave AR space
-		normalized_y = EffectType == 0 ? (normalized_y - Y_Offset) * scale_normal + Y_Offset : normalized_y;
-		//calculate relative position towards outer and inner ring and interpolate
-		float real_scale = (1 - val) * InnerRing + val * OuterRing;
-		float adjusted_x = EffectType == 0 ? normalized_x * real_scale + 0.5 - X_Offset : normalized_x * real_scale + 0.5 - X_Offset;
-		float adjusted_y = normalized_y * real_scale + 0.5 - Y_Offset;
-		fragment = tex2D(ReShade::BackBuffer, float2(adjusted_x, adjusted_y));
-	}
+        // normalized vector
+        float vector_length     = sqrt(new_pos.x * new_pos.x + new_pos.y * new_pos.y);
+        float unit_circle_ratio = UI_EffectType == 0 ? 0.5 / vector_length : 0.5 / max(abs(new_pos.x), abs(new_pos.y));
+        float2 normalized       = new_pos * unit_circle_ratio;
 
+        // calculate relative position towards outer and inner ring and interpolate
+        const float INNER_RING = 1 / exp(1 / (UI_Frequency)) * UI_OuterRing;
+        float real_scale       = (1 - val) * INNER_RING + val * UI_OuterRing;
+        real_scale            *= intensity;
+        float2 adjusted        = normalized * real_scale / AR + 0.5 - OFFSET;
+        fragment               = tex2D(ReShade::BackBuffer, adjusted);
+    }
 
-	////////////////////////////////////////////////////////////////////////////////////////////////////////
-	//***************************************                  *******************************************//
-	//***************************************     Pipeline     *******************************************//
-	//***************************************                  *******************************************//
-	////////////////////////////////////////////////////////////////////////////////////////////////////////
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////
+    //
+    //                                             Techniques
+    //
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-
-	technique Droste < ui_tooltip = "Warp space inside a spiral."; >
-	{
-		pass spiral_step { VertexShader = PostProcessVS; PixelShader = droste; }
-	}
+    technique TECH_Droste <
+        ui_label     = "Droste Effect";
+        ui_tooltip   = "------About-------\n"
+                       "Droste.fx warps the image-space to recursively appear within itself.\n\n"
+                       "Version:    " COBRA_DRO_VERSION "\nAuthor:     SirCobra\nCollection: CobraFX\n"
+                       "            https://github.com/LordKobra/CobraFX";
+    >
+    {
+        pass Droste
+        {
+            VertexShader = PostProcessVS;
+            PixelShader  = PS_Droste;
+        }
+    }
 }
