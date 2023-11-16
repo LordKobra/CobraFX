@@ -6,7 +6,7 @@ CobraFX comprises SirCobra's contribution of shaders for [ReShade](https://githu
 ### Requirements
 
 >[!IMPORTANT]
->All compute shaders (filename has "_CS"-Suffix) only work with ReShade 4.8 or newer, DirectX 11 or newer, OpenGL 4.3 or newer and Vulkan!
+>All compute shaders (filename has `_CS`-Suffix) only work with ReShade 4.8 or newer, DirectX 11 or newer, OpenGL 4.3 or newer and Vulkan!
 
 
 >**Note**
@@ -45,7 +45,7 @@ If you want a continuous effect, make sure to also check out the old [LongExposu
 
 Tip: Right-click the `Start Exposure` button to bind this functionality to a hotkey for convenient usage.
 
-<p align="center"><img src="https://cdn.discordapp.com/attachments/995429348637167646/1171151680616800276/The_Witcher_3_Screenshot_2023.11.06_-_19.17.50.63.png?ex=655ba2ff&is=65492dff&hm=6891ab57df21487f5132b96f928a287fdabbe14d37d866159b76ab9abeda81c0&">
+<p align="center"><img src="https://steamuserimages-a.akamaihd.net/ugc/2211891143717970227/51DC0950C55687C0DF7ABC719238AA65935980C3/?imw=5000&imh=5000&ima=fit&impolicy=Letterbox&imcolor=%23000000&letterbox=false">
 <i>Realistic Long-Exposure in action</i></p>
 
 ## Droste Effect
