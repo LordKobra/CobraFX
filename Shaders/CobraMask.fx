@@ -1,6 +1,6 @@
 ////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Cobra Mask (CobraMask.fx) by SirCobra
-// Version 0.2.1
+// Version 0.2.2
 // You can find info and all my shaders here: https://github.com/LordKobra/CobraFX
 //
 // --------Description---------
@@ -13,7 +13,7 @@
 // part of the screen with the correct color and depth.
 //
 // ----------Credits-----------
-// 1) The effect can be applied to a specific area like a DoF shader. The basic methods for this were 
+// 1) The effect can be applied to a specific area like a DoF shader. The basic methods for this were
 // taken with permission from: https://github.com/FransBouma/OtisFX/blob/master/Shaders/Emphasize.fx
 // 2) HSV conversions by Sam Hocevar: http://lolengine.net/blog/2013/07/27/rgb-to-hsv-in-glsl
 ////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -27,14 +27,10 @@
 // Shader Start
 // Defines
 
-#define COBRA_MSK_VERSION "0.2.1"
+#define COBRA_MSK_VERSION "0.2.2"
 #define COBRA_MSK_UI_GENERAL "\n / General Options /\n"
 #define COBRA_MSK_UI_COLOR "\n /  Color Masking  /\n"
 #define COBRA_MSK_UI_DEPTH "\n /  Depth Masking  /\n"
-
-#ifndef M_PI
-    #define M_PI 3.1415927
-#endif
 
 // Includes
 
@@ -76,11 +72,11 @@ namespace COBRA_MSK
         ui_label     = " Value";
         ui_type      = "slider";
         ui_min       = 0.000;
-        ui_max       = 1.001;
+        ui_max       = 1.000;
         ui_step      = 0.001;
         ui_tooltip   = "The value describes the brightness of the hue. 0 is black/no hue and 1 is maximum hue (e.g. pure red).";
         ui_category  = COBRA_MSK_UI_COLOR;
-    >                = 1.001;
+    >                = 1.000;
 
     uniform float UI_ValueRange <
         ui_label     = " Value Range";
@@ -214,10 +210,10 @@ namespace COBRA_MSK
     >                = 0.5;
 
     uniform int UI_BufferEnd <
-        ui_type      = "radio";
-        ui_spacing   = 2;
-        ui_text      = " Shader Version: "COBRA_MSK_VERSION;
-        ui_label     = " ";
+        ui_type     = "radio";
+        ui_spacing  = 2;
+        ui_text     = " Shader Version: " COBRA_MSK_VERSION;
+        ui_label    = " ";
     > ;
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -237,7 +233,13 @@ namespace COBRA_MSK
 
     // Sampler
 
-    sampler2D SAM_Mask { Texture = TEX_Mask; };
+    sampler2D SAM_Mask
+    {
+        Texture   = TEX_Mask;
+        MagFilter = POINT;
+        MinFilter = POINT;
+        MipFilter = POINT;
+    };
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////
     //
@@ -245,38 +247,9 @@ namespace COBRA_MSK
     //
     ////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-    // HSV conversions by Sam Hocevar: http://lolengine.net/blog/2013/07/27/rgb-to-hsv-in-glsl
-    float4 rgb2hsv(float4 c)
-    {
-        const float4 K = float4(0.0, -1.0 / 3.0, 2.0 / 3.0, -1.0);
-        float4 p       = lerp(float4(c.bg, K.wz), float4(c.gb, K.xy), step(c.b, c.g));
-        float4 q       = lerp(float4(p.xyw, c.r), float4(c.r, p.yzx), step(p.x, c.r));
-        float d        = q.x - min(q.w, q.y);
-        const float E  = 1.0e-10;
-        return float4(abs(q.z + (q.w - q.y) / (6.0 * d + E)), d / (q.x + E), q.x, 1.0);
-    }
-
-    float4 hsv2rgb(float4 c)
-    {
-        const float4 K = float4(1.0, 2.0 / 3.0, 1.0 / 3.0, 3.0);
-        float3 p = abs(frac(c.xxx + K.xyz) * 6.0 - K.www);
-        return float4(c.z * lerp(K.xxx, saturate(p - K.xxx), c.y),1.0);
-    }
-
-    // show the color bar. inspired by originalnicodrs design
-    float4 show_hue(float2 texcoord, float4 fragment)
-    {
-        const float RANGE = 0.145;
-        const float DEPTH = 0.06;
-        if (abs(texcoord.x - 0.5) < RANGE && texcoord.y < DEPTH)
-        {
-            float4 hsv  = float4(saturate(texcoord.x - 0.5 + RANGE) / (2.0 * RANGE), 1.0, 1.0, 1.0);
-            float4 rgb  = hsv2rgb(hsv);
-            bool active = min(abs(hsv.r - UI_Hue), (1.0 - abs(hsv.r - UI_Hue))) < UI_HueRange;
-            fragment    = active ? rgb : float4(0.5, 0.5, 0.5, 1.0);
-        }
-        return fragment;
-    }
+    #define COBRA_UTL_COLOR 1
+    #include ".\CobraUtility.fxh"
+    #undef COBRA_UTL_COLOR
 
     // returns a value between 0 and 1 (1 = in focus)
     float check_focus(float4 rgb, float scene_depth, float2 texcoord)
@@ -288,6 +261,7 @@ namespace COBRA_MSK
         bool d2              = abs(hsv.r - UI_Hue) < (UI_HueRange + pow(2.71828, -(hsv.g * hsv.g) / 0.005)) || (1.0 - abs(hsv.r - UI_Hue)) < (UI_HueRange + pow(2.71828, -(hsv.g * hsv.g) / 0.01));
         bool d3              = abs(hsv.g - UI_Saturation) <= UI_SaturationRange;
         float is_color_focus = max(d3 * d2 * d1_f, UI_FilterColor == 0); // color threshold
+
         // depthfilter
         const float DESATURATE_FULL_RANGE = UI_FocusRangeDepth + UI_FocusEdgeDepth;
         texcoord.x                        = (texcoord.x - UI_SphereFocusHorizontal) * ReShade::ScreenSize.x;
@@ -308,18 +282,18 @@ namespace COBRA_MSK
 
     void PS_MaskStart(float4 vpos : SV_Position, float2 texcoord : TEXCOORD, out float4 fragment : SV_Target)
     {
-        float4 color   = tex2D(ReShade::BackBuffer, texcoord);
+        float4 color   = tex2Dfetch(ReShade::BackBuffer, floor(vpos.xy));
         float depth    = ReShade::GetLinearizedDepth(texcoord);
         float in_focus = check_focus(color, depth, texcoord);
-        in_focus       = (1.0 - UI_InvertMask) * in_focus + UI_InvertMask * (1.0 - in_focus);
+        in_focus       = lerp(in_focus, 1 - in_focus, UI_InvertMask); // in_focus - 2UI*focus + UI
         fragment       = float4(color.rgb, in_focus);
     }
 
     void PS_MaskEnd(float4 vpos : SV_Position, float2 texcoord : TEXCOORD, out float4 fragment : SV_Target)
     {
-        fragment = tex2D(SAM_Mask, texcoord);
-        fragment = UI_ShowMask ? fragment.aaaa : lerp(tex2D(ReShade::BackBuffer, texcoord), fragment, 1.0 - fragment.a);
-        fragment = (UI_ShowSelectedHue * UI_FilterColor * !UI_ShowMask) ? show_hue(texcoord, fragment) : fragment;
+        fragment = tex2Dfetch(SAM_Mask, floor(vpos.xy));
+        fragment = UI_ShowMask ? fragment.aaaa : lerp(tex2Dfetch(ReShade::BackBuffer, floor(vpos.xy)), fragment, 1.0 - fragment.a);
+        fragment = (UI_ShowSelectedHue * UI_FilterColor) ? show_hue(texcoord, fragment) : fragment;
     }
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -329,17 +303,17 @@ namespace COBRA_MSK
     ////////////////////////////////////////////////////////////////////////////////////////////////////////
 
     technique TECH_CobraMaskStart <
-        ui_label    = "Cobra Mask: Start";
-        ui_tooltip  = "Place this -above- the shaders you want to mask.\n"
-                      "The masked area is copied and stored here, meaning all effects\n"
-                      "applied between Start and Finish only affect the unmasked area.\n\n"
-                      "------About-------\n"
-                      "CobraMask.fx allows to apply ReShade shaders exclusively to a selected part of the screen.\n"
-                      "The mask can be defined through color and scene-depth parameters. The parameters are\n"
-                      "specifically designed to work in accordance with the color and depth selection of other\n"
-                      "CobraFX shaders.\n\n"
-                      "Version:    "COBRA_MSK_VERSION"\nAuthor:     SirCobra\nCollection: CobraFX\n"
-                      "            https://github.com/LordKobra/CobraFX";
+        ui_label     = "Cobra Mask: Start";
+        ui_tooltip   = "Place this -above- the shaders you want to mask.\n"
+                       "The masked area is copied and stored here, meaning all effects\n"
+                       "applied between Start and Finish only affect the unmasked area.\n\n"
+                       "------About-------\n"
+                       "CobraMask.fx allows to apply ReShade shaders exclusively to a selected part of the screen.\n"
+                       "The mask can be defined through color and scene-depth parameters. The parameters are\n"
+                       "specifically designed to work in accordance with the color and depth selection of other\n"
+                       "CobraFX shaders.\n\n"
+                       "Version:    " COBRA_MSK_VERSION "\nAuthor:     SirCobra\nCollection: CobraFX\n"
+                       "            https://github.com/LordKobra/CobraFX";
     >
     {
         pass MaskStart
@@ -351,15 +325,15 @@ namespace COBRA_MSK
     }
 
     technique TECH_CobraMaskFinish <
-        ui_label    = "Cobra Mask: Finish";
-        ui_tooltip  = "Place this -below- the shaders you want to mask.\n"
-                      "The masked area is applied again onto the screen.\n\n"
-                      "------About-------\n"
-                      "CobraMask.fx allows to apply ReShade shaders exclusively to a selected part of the screen.\n"
-                      "The mask can be defined through color and scene-depth parameters. The parameters are\n"
-                      "specifically designed to work in accordance with the color and depth selection of other\n"
-                      "CobraFX shaders.\n\n"
-                       "Version:    "COBRA_MSK_VERSION"\nAuthor:     SirCobra\nCollection: CobraFX\n"
+        ui_label     = "Cobra Mask: Finish";
+        ui_tooltip   = "Place this -below- the shaders you want to mask.\n"
+                       "The masked area is applied again onto the screen.\n\n"
+                       "------About-------\n"
+                       "CobraMask.fx allows to apply ReShade shaders exclusively to a selected part of the screen.\n"
+                       "The mask can be defined through color and scene-depth parameters. The parameters are\n"
+                       "specifically designed to work in accordance with the color and depth selection of other\n"
+                       "CobraFX shaders.\n\n"
+                       "Version:    " COBRA_MSK_VERSION "\nAuthor:     SirCobra\nCollection: CobraFX\n"
                        "            https://github.com/LordKobra/CobraFX";
     >
     {

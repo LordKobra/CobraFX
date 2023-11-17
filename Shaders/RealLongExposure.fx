@@ -1,6 +1,6 @@
 ////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Realistic Long-Exposure (RealLongExposure.fx) by SirCobra
-// Version 0.5.0 COBRA_RLE_VERSION
+// Version 0.5.1
 // You can find info and all my shaders here: https://github.com/LordKobra/CobraFX
 //
 // --------Description---------
@@ -26,7 +26,7 @@ uniform float timer <
 // Shader Start
 
 // Defines
-#define COBRA_RLE_VERSION "0.5.0"
+#define COBRA_RLE_VERSION "0.5.1"
 #define COBRA_RLE_UI_GENERAL "\n / General Options /\n"
 #define COBRA_RLE_TIME_MAX 16777216 // 2^24 because of 23 bit fraction plus 'implicit leading bit'
 
@@ -37,7 +37,7 @@ uniform float timer <
     #define COBRA_RLE_COMPUTE 0
 #endif
 
-#define COBRA_RLE_YSIZE 8
+#define COBRA_RLE_YSIZE 20
 
 // Namespace Everything!
 
@@ -200,20 +200,23 @@ namespace COBRA_RLE
     };
 #else
 
+    // Storage
+
     storage2D<float4> STOR_Exposure { Texture = TEX_Exposure; };
     storage2D<float4> STOR_Timer { Texture = TEX_Timer; };
     storage<uint> STOR_SyncCount { Texture = TEX_SyncCount; };
 
 #endif
 
-////////////////////////////////////////////////////////////////////////////////////////////////////////
-//
-//                                           Helper Functions
-//
-////////////////////////////////////////////////////////////////////////////////////////////////////////
-#define COBRA_UTL_COLOR 0
-#include ".\CobraUtility.fxh"
-#undef COBRA_UTL_COLOR
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////
+    //
+    //                                           Helper Functions
+    //
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////
+    
+    #define COBRA_UTL_COLOR 0
+    #include ".\CobraUtility.fxh"
+    #undef COBRA_UTL_COLOR
 
     // return the exposure weight of a single frame
     float4 get_exposure(float4 value)
@@ -319,16 +322,19 @@ namespace COBRA_RLE
 
 #else
 
-    groupshared float3 timer_value[1];
+    groupshared float4 timer_value[1];
 
     void CS_LongExposure(uint3 id : SV_DispatchThreadID, uint3 tid : SV_GroupThreadID, uint gi : SV_GroupIndex)
     {
-        if (tid.y == 0)
+        [branch]
+        if (gi == 0)
         {
             timer_value[0].xy = tex2Dfetch(STOR_Timer, int2(0, 0)).xy;
             timer_value[0].z  = timer % COBRA_RLE_TIME_MAX;
+            timer_value[0].w = (UI_StartExposure && (abs(timer_value[0].z - timer_value[0].x) > UI_Delay) && (abs(timer_value[0].z - timer_value[0].x) < 1000.0 * UI_ExposureDuration));
+            
             uint passes       = atomicAdd(STOR_SyncCount, int2(0, 0), 1u);
-            if (passes == BUFFER_WIDTH * COBRA_RLE_YSIZE - 1)
+            if (passes == BUFFER_WIDTH/8 * COBRA_RLE_YSIZE - 1)
             {
                 float4 frag = 0.0;
                 frag.a      = 1.0;
@@ -339,32 +345,29 @@ namespace COBRA_RLE
                 else
                 {
                     frag.x = timer_value[0].x;
-                    frag.y = timer_value[0].y + (UI_StartExposure && (abs(timer_value[0].z - timer_value[0].x) > UI_Delay) && (abs(timer_value[0].z - timer_value[0].x) < 1000.0 * UI_ExposureDuration));
+                    frag.y = timer_value[0].y + timer_value[0].w;
                 }
                 // reset
                 atomicExchange(STOR_SyncCount, int2(0, 0), 0);
                 tex2Dstore(STOR_Timer, int2(0, 0), frag);
             }
         }
-
         barrier();
-        bool no_skip = (UI_StartExposure && (abs(timer_value[0].z - timer_value[0].x) > UI_Delay) && (abs(timer_value[0].z - timer_value[0].x) < 1000.0 * UI_ExposureDuration));
 
-        float2 timer_values = timer_value[0].xy;
-        float current_time  = timer_value[0].z;
-        if (!no_skip)
+        [branch]
+        if (timer_value[0].w < 0.5)
             return;
-        uint2 vpos      = uint2(id.x, id.y);
         float4 fragment = 1.0;
-        fragment.rgb    = tex2Dfetch(ReShade::BackBuffer, vpos).rgb;
+        fragment.rgb    = tex2Dfetch(ReShade::BackBuffer, id.xy).rgb;
         fragment        = get_exposure(fragment);
         // at beginning: reset so it is ready for activation
-        fragment.a = timer_values.y < 0.5 ? 1.0 : 0.0;
-        fragment.rgb += timer_values.y < 0.5 ? 0.0 : tex2Dfetch(STOR_Exposure, vpos.xy).rgb;
+
+        fragment.a = timer_value[0].y < 0.5;
+        fragment.rgb += (1 - fragment.a) * tex2Dfetch(STOR_Exposure, id.xy).rgb;
 
         barrier();
 
-        tex2Dstore(STOR_Exposure, vpos, fragment);
+        tex2Dstore(STOR_Exposure, id.xy, fragment);
     }
 
 #endif
@@ -373,6 +376,7 @@ namespace COBRA_RLE
     {
         float2 timer_values = tex2Dfetch(SAM_Timer, int2(0, 0)).rg;
         vs2ps o             = vs_basic(id, timer_values);
+
         if (!UI_StartExposure)
             o.vpos.xy = 0.0;
         return o;
@@ -385,6 +389,7 @@ namespace COBRA_RLE
         float2 timer_values = o.uv.zw;
         float current_time  = timer % COBRA_RLE_TIME_MAX;
         fragment            = float4(0.0, 0.0, 0.0, 1.0);
+
         if (UI_StartExposure && timer_values.y)
         {
             fragment.rgb = exposure_rgb.rgb / timer_values.y;
@@ -394,6 +399,7 @@ namespace COBRA_RLE
         {
             fragment.rgb = game_rgb.rgb;
         }
+
         if (!UI_StartExposure || !(UI_ShowProgress || UI_ShowGreenOnFinish))
             return;
 
@@ -455,8 +461,8 @@ namespace COBRA_RLE
 
         pass LongExposure
         {
-            ComputeShader = CS_LongExposure<1, BUFFER_HEIGHT / COBRA_RLE_YSIZE>;
-            DispatchSizeX = BUFFER_WIDTH;
+            ComputeShader = CS_LongExposure<8, BUFFER_HEIGHT / COBRA_RLE_YSIZE>;
+            DispatchSizeX = BUFFER_WIDTH/8;
             DispatchSizeY = COBRA_RLE_YSIZE;
         }
 
