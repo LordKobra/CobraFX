@@ -1,4 +1,9 @@
 CobraMask.fx
+        0.2.3   2023-11-17
+                - now depends on CobraUtility.fxh v0.1.1
+                - slight performance improvements
+                - fixed value range bug
+                - fixed hue bar becoming invisible when mask displayed
 
         0.2.1   2023-11-08
                 - huge code reformatting (can break presets)
@@ -6,8 +11,12 @@ CobraMask.fx
                 - renamed from "Cobra_Mask.fx" to "CobraMask.fx" (can break presets too)
                 - hsv2rgb function changed
 
-ColorSort_CS.fx
+CobraUtility.fxh
+        0.1.1   2023-11-20
+                - added to the repository
+                - has a basic function compendium
 
+ColorSort_CS.fx
         0.5.1   2023-11-08
                 - huge code reformatting (can break presets)
                 - improved tooltips
@@ -16,6 +25,9 @@ ColorSort_CS.fx
                 - fixed bug causing effect to crash if "NoDebugInfo=1" was set in the ReShade.ini
 
 Droste.fx
+        0.4.2   2023-11-17
+                - now depends on CobraUtility.fxh
+                - minor performance improvements
 
         0.4.1   2023-11-08
                 - huge code reformatting (can break presets)
@@ -25,12 +37,24 @@ Droste.fx
                         - automatic aspect-ratio adjustment
 
 Gravity.fx
+        0.2.2   2023-11-20
+                - changed noise texture name
 
         0.2.1   2023-11-08
                 - huge code reformatting (can break presets)
                 - improved tooltips
 
 Gravity_CS.fx
+        0.3.0   2023-11-20
+                - now depends on CobraUtility.fxh v0.1.1
+                - added adjustable noise size
+                - added hotsampling and arbitrary resolution support
+                - added extra blending mode
+                - default quality improved
+                - significant performance improvements (speed at settings default: 2x, high: 4x, low: 3x)
+                - memory footprint reduced by 25%
+                - improved tooltips
+                - changed noise texture name to "gravity_noise.png"
 
         0.2.1   2023-11-08
                 - huge code reformatting (can break presets)
@@ -39,6 +63,15 @@ Gravity_CS.fx
                 - fixed bug causing effect to disappear when tint-intensity was set to 0
 
 RealLongExposure.fx
+        0.5.2   2023-11-20
+                - custom resolution compability
+
+        0.5.0   2023-11-17
+                - now depends on CobraUtility.fxh
+                - added optional progress bar
+                - slight tooltip adjustments
+                - significant performance improvement (speed at idle 5x, exposure 1.2x, display 2x)
+                - memory consumption halved, if compute shader support is detected
 
         0.4.1   2023-11-08
                 - huge code reformatting (can break presets)
@@ -49,5 +82,6 @@ RealLongExposure.fx
                 - fixed ReShade 5.0 compability
 
 Outdated shaders (LongExposure.fx)
+
         0.1.1   2023-11-08
                 - huge code reformatting (can break presets)

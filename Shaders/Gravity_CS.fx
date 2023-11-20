@@ -1,13 +1,13 @@
 ////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Gravity CS (Gravity_CS.fx) by SirCobra
-// Version 0.2.1
+// Version 0.3.0
 // You can find info and all my shaders here: https://github.com/LordKobra/CobraFX
 //
 // --------Description---------
 // Gravity_CS.fx lets pixels gravitate towards the bottom of the screen in the game's 3D environment.
 // You can filter the affected pixels by depth and by color.
 // It uses a custom seed (currently the Mandelbrot set) to determine the intensity of each pixel.
-// Make sure to also test out the texture-RNG variant with the picture "gravityrng.png" provided
+// Make sure to also test out the texture-RNG variant with the picture "gravity_noise.png" provided
 // in the Textures folder. You can replace the texture with your own picture, as long as it
 // is 1920x1080, RGBA8 and has the same name. Only the red-intensity is taken. So either use red
 // images or greyscale images.
@@ -21,31 +21,44 @@
 // Thanks to FransBouma, Lord of Lunacy and Annihlator for advice on my first shader :)
 ////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-////////////////////////////////////////////////////////////////////////////////////////////////////////
-//
-//                                            Defines & UI
-//
-////////////////////////////////////////////////////////////////////////////////////////////////////////
+// Includes
 
-// Defines
+#include "Reshade.fxh"
 
-#define COBRA_XGRV_VERSION "0.2.1"
+// Shader Start
+
+// Namespace Everything!
+
+namespace COBRA_XGRV
+{
+
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////
+    //
+    //                                            Defines & UI
+    //
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+    // Defines
+
+#define COBRA_XGRV_VERSION "0.3.0"
 #define COBRA_XGRV_UI_GENERAL "\n / General Options /\n"
 #define COBRA_XGRV_UI_DEPTH "\n /  Depth Options  /\n"
 #define COBRA_XGRV_UI_COLOR "\n /  Color Options  /\n"
-
-#ifndef M_PI
-    #define M_PI 3.1415927
-#endif
+#define COBRA_XGRV_UI_EXTRAS "\n /      Extras     /\n"
 
 #ifndef GRAVITY_HEIGHT
-    #define GRAVITY_HEIGHT 768
+    #define GRAVITY_HEIGHT 1080
 #endif
 
-#define COBRA_XGRV_RES_Y float(BUFFER_HEIGHT) / GRAVITY_HEIGHT
+#define ROUNDUP(x, y) (((x - 1) / y) + 1)
+#define COBRA_MIN(a, b) (int((a) < (b)) * (a) + int((b) <= (a)) * (b))
+#define COBRA_XGRV_HEIGHT COBRA_MIN(GRAVITY_HEIGHT, 2000)
+#define COBRA_XGRV_RES_Y (float(BUFFER_HEIGHT) / COBRA_XGRV_HEIGHT)
 #define COBRA_XGRV_RES_X 1
-#define GRAVITY_WIDTH float(BUFFER_WIDTH) / COBRA_XGRV_RES_X
-
+#define GRAVITY_WIDTH (float(BUFFER_WIDTH) / COBRA_XGRV_RES_X)
+#define COBRA_XGRV_WORKLOAD 8
+#define COBRA_XGRV_THREADS ROUNDUP(COBRA_XGRV_HEIGHT, COBRA_XGRV_WORKLOAD)
+#define COBRA_XGRV_MEMORY_HEIGHT (COBRA_XGRV_THREADS * COBRA_XGRV_WORKLOAD)
 // We need Compute Shader Support
 #if (((__RENDERER__ >= 0xb000 && __RENDERER__ < 0x10000) || (__RENDERER__ >= 0x14300)) && __RESHADE__ >= 40800)
     #define COBRA_XGRV_COMPUTE 1
@@ -54,18 +67,8 @@
     #warning "Gravity_CS.fx does only work with ReShade 4.8 or newer, DirectX 11 or newer, OpenGL 4.3 or newer and Vulkan."
 #endif
 
-// Includes
-
-#include "Reshade.fxh"
-
-// Shader Start
-
 #if COBRA_XGRV_COMPUTE != 0
 
-// Namespace Everything!
-
-namespace COBRA_XGRV
-{
     // UI
 
     uniform float UI_GravityIntensity <
@@ -75,7 +78,7 @@ namespace COBRA_XGRV
         ui_min       = 0.00;
         ui_max       = 1.00;
         ui_step      = 0.01;
-        ui_tooltip   = "Gravity strength. Higher values look cooler but increase the computation time by a lot!";
+        ui_tooltip   = "Gravity strength. Higher values look cooler but can decrease FPS!";
         ui_category  = COBRA_XGRV_UI_GENERAL;
     >                = 0.50;
 
@@ -91,9 +94,10 @@ namespace COBRA_XGRV
 
     uniform bool UI_UseImage <
         ui_label     = " Use Image";
-        ui_tooltip   = "Changes the RNG to the input image called gravityrng.png located in the Textures folder.\nYou can change the image for your own RNG as long as the name and resolution stay the same.";
+        ui_tooltip   = "Changes the RNG to the input image called gravity_noise.png located in the Textures folder.\n"
+                       "You can change the image for your own RNG as long as the name and resolution stay the same.";
         ui_category  = COBRA_XGRV_UI_GENERAL;
-    >                = false;
+    >                = true;
 
     uniform bool UI_InvertGravity <
         ui_label     = " Invert Gravity";
@@ -107,21 +111,23 @@ namespace COBRA_XGRV
         ui_category  = COBRA_XGRV_UI_GENERAL;
     >                = false;
 
-    uniform float3 UI_EffectTint <
-        ui_label     = " Effect Tint";
-        ui_type      = "color";
-        ui_tooltip   = "Specifies the tint of the gravitating pixels, the further they move away from their origin.";
-        ui_category  = COBRA_XGRV_UI_GENERAL;
-    >                = float3(0.50, 0.50, 0.50);
-
-    uniform float UI_TintIntensity <
-        ui_label     = " Tint Intensity";
+    uniform float UI_NoiseSize <
+        ui_label     = " Noise Size";
         ui_type      = "slider";
-        ui_min       = 0.0;
-        ui_max       = 1.0;
-        ui_tooltip   = "Specifies intensity of the tint applied to the gravitating pixels. Range from 0.0, which\nmeans no tint, till 1.0 which means fully tinted.";
+        ui_min       = 0.001;
+        ui_max       = 1.000;
+        ui_step      = 0.001;
+        ui_tooltip   = "Size of the noise texture. A lower value means larger noise pixels.";
         ui_category  = COBRA_XGRV_UI_GENERAL;
-    >                = 0.0;
+    >                = 1.000;
+
+    uniform bool UI_HotsamplingMode <
+        ui_label     = " Hotsampling Mode";
+        ui_tooltip   = "The noise will be the same at all resolutions. Activate this, then adjust your options\n"
+                       "and it will stay the same at all resolutions. Turn this off when you do not intend\n"
+                       "to hotsample.";
+        ui_category  = COBRA_XGRV_UI_GENERAL;
+    >                = false;
 
     uniform bool UI_FilterDepth <
         ui_label     = " Filter by Depth";
@@ -136,7 +142,8 @@ namespace COBRA_XGRV
         ui_min       = 0.000;
         ui_max       = 1.000;
         ui_step      = 0.001;
-        ui_tooltip   = "Manual depth of the focus center. Ranges from 0.0, which means the camera position\nis the focus plane, till 1.0 which means the horizon is the focus plane.";
+        ui_tooltip   = "Manual depth of the focus center. Ranges from 0.0, which means the camera position is the\n"
+                       "focus plane, till 1.0, which means the horizon is the focus plane.";
         ui_category  = COBRA_XGRV_UI_DEPTH;
     >                = 0.030;
 
@@ -155,7 +162,8 @@ namespace COBRA_XGRV
         ui_type      = "slider";
         ui_min       = 0.000;
         ui_max       = 1.000;
-        ui_tooltip   = "The smoothness of the edge of the focus range. Range from 0.0, which means sudden\ntransition, till 1.0, which means the effect is smoothly fading towards camera and horizon.";
+        ui_tooltip   = "The smoothness of the edge of the focus range. Range from 0.0, which means sudden transition,\n"
+                       "till 1.0, which means the effect is smoothly fading towards camera and horizon.";
         ui_step      = 0.001;
         ui_category  = COBRA_XGRV_UI_DEPTH;
     >                = 0.020;
@@ -172,27 +180,30 @@ namespace COBRA_XGRV
         ui_min       = 1;
         ui_max       = 180;
         ui_units     = "°";
-        ui_tooltip   = "Specifies the estimated Field of View you are currently playing with. Range from 1,\nwhich means 1 Degree, till 180 which means 180 Degree (half the scene).\nNormal games tend to use values between 60 and 90.";
+        ui_tooltip   = "Specifies the estimated Field of View (FOV) you are currently playing with. Range from 1°,\n"
+                       "till 180° (half the scene).\nNormal games tend to use values between 60° and 90°.";
         ui_category  = COBRA_XGRV_UI_DEPTH;
     >                = 75;
 
     uniform float UI_SphereFocusHorizontal <
-        ui_label = " Spherical Horizontal Focus";
+        ui_label     = " Spherical Horizontal Focus";
         ui_type      = "slider";
         ui_min       = 0.0;
         ui_max       = 1.0;
-        ui_tooltip   = "Specifies the location of the focuspoint on the horizontal axis. Range from 0, which\nmeans left screen border, till 1 which means right screen border.";
+        ui_tooltip   = "Specifies the location of the focuspoint on the horizontal axis. Range from 0, which means\n"
+                       "left screen border, till 1 which means right screen border.";
         ui_category  = COBRA_XGRV_UI_DEPTH;
-    >            = 0.5;
+    >                = 0.5;
 
     uniform float UI_SphereFocusVertical <
-        ui_label = " Spherical Vertical Focus";
+        ui_label     = " Spherical Vertical Focus";
         ui_type      = "slider";
         ui_min       = 0.0;
         ui_max       = 1.0;
-        ui_tooltip   = "Specifies the location of the focuspoint on the vertical axis. Range from 0, which\nmeans upper screen border, till 1 which means bottom screen border.";
+        ui_tooltip   = "Specifies the location of the focuspoint on the vertical axis. Range from 0, which means\n"
+                       "upper screen border, till 1, which means bottom screen border.";
         ui_category  = COBRA_XGRV_UI_DEPTH;
-    >            = 0.5;
+    >                = 0.5;
 
     uniform bool UI_FilterColor <
         ui_label     = " Filter by Color";
@@ -211,11 +222,11 @@ namespace COBRA_XGRV
         ui_label     = " Value";
         ui_type      = "slider";
         ui_min       = 0.000;
-        ui_max       = 1.001;
+        ui_max       = 1.000;
         ui_step      = 0.001;
-        ui_tooltip   = "The value describes the brightness of the hue. 0 is black/no hue and 1 is maximum hue (e.g. pure red).";
+        ui_tooltip   = "The value describes the brightness of the hue. 0 is black, 1 is maximum hue (e.g. pure red).";
         ui_category  = COBRA_XGRV_UI_COLOR;
-    >                = 1.001;
+    >                = 1.000;
 
     uniform float UI_ValueRange <
         ui_label     = " Value Range";
@@ -267,11 +278,60 @@ namespace COBRA_XGRV
         ui_category  = COBRA_XGRV_UI_COLOR;
     >                = 1.000;
 
+    /*     uniform int UI_BlendMode <
+            ui_label     = " Blend Mode";
+            ui_type      = "radio";
+            ui_spacing   = 2;
+            ui_items     = "Tint\0Saturate\0Desaturate\0Oversaturate\0";
+            ui_tooltip   = "The blend mode applied to the pixel, depending on its distance travelled.";
+            ui_category  = COBRA_XGRV_UI_EXTRAS;
+        >                = 0; */
+
+    uniform bool UI_LockHue <
+        ui_label           = " Lock Hue";
+        ui_spacing         = 2;
+        ui_tooltip         = "Lock the hue to the ingame hue.";
+        ui_category        = COBRA_XGRV_UI_EXTRAS;
+        ui_category_closed = true; // Remains here just in case
+    >                      = false;
+
+    uniform bool UI_LockSaturation <
+        ui_label     = " Lock Saturation";
+        ui_tooltip   = "Lock the saturation to the ingame saturation.";
+        ui_category  = COBRA_XGRV_UI_EXTRAS;
+    >                = false;
+
+    uniform bool UI_LockValue <
+        ui_label     = " Lock Brightness";
+        ui_tooltip   = "Lock the brightness to the ingame brightness.";
+        ui_category  = COBRA_XGRV_UI_EXTRAS;
+    >                = false;
+
+    uniform float3 UI_EffectTint <
+        ui_label     = " Effect Tint";
+        ui_type      = "color";
+        ui_tooltip   = "Specifies the tint of the gravitating pixels, the further they move away from their origin.";
+        ui_category  = COBRA_XGRV_UI_EXTRAS;
+    >                = float3(0.50, 0.50, 0.50);
+
+    uniform float UI_BlendIntensity <
+        ui_label     = " Blend Intensity";
+        ui_type      = "slider";
+        ui_min       = 0.0;
+        ui_max       = 1.0;
+        ui_tooltip   = "Specifies intensity of the blending applied to the gravitating pixels. Range from 0.0, which\n"
+                       "means no change, till 1.0, which means fully blended.";
+        ui_category  = COBRA_XGRV_UI_EXTRAS;
+    >                = 0.0;
+
     uniform int UI_BufferEnd <
         ui_type     = "radio";
         ui_spacing  = 2;
-        ui_text     = " Preprocessor Options:\n * GRAVITY_HEIGHT (default value: 768) defines the resolution of the effect along the gravitational axis. The value needs to be integer. Smaller values give performance at cost of visual fidelity.\n\n"
-        " Shader Version: " COBRA_XGRV_VERSION;
+        ui_text     = " Preprocessor Options:\n * GRAVITY_HEIGHT (default value: 1024) defines the "
+                      "resolution of the effect along the gravitational axis. The value needs to be integer. "
+                      "Smaller values give performance at cost of visual fidelity. 768: Performance 1080: HD Quality. "
+                      "Set it to 'BUFFER_HEIGHT' if you always want to run the effect at native resolution.\n\n"
+                      " Shader Version: " COBRA_XGRV_VERSION;
         ui_label    = " ";
     > ;
 
@@ -286,19 +346,13 @@ namespace COBRA_XGRV
     texture TEX_GravitySeedMap
     {
         Width  = GRAVITY_WIDTH;
-        Height = GRAVITY_HEIGHT;
+        Height = COBRA_XGRV_HEIGHT;
         Format = R16F;
     };
 
-    texture TEX_GravitySeedMapCopy
-    {
-        Width  = GRAVITY_WIDTH;
-        Height = GRAVITY_HEIGHT;
-        Format = R16F;
-    };
-
-    texture TEX_GravitySeedMap2 < source = "gravityrng.png";
-    > //@TODO reduce to one map, see gravity.fx eric solution
+    texture TEX_GravitySeedMap2 <
+        source = "gravity_noise.png";
+    >
     {
         Width  = 1920;
         Height = 1080;
@@ -308,30 +362,44 @@ namespace COBRA_XGRV
     texture TEX_GravityCurrentSettings
     {
         Width  = 1;
-        Height = 2;
+        Height = 1;
         Format = R16F;
     };
 
     texture TEX_GravityMain
     {
         Width  = GRAVITY_WIDTH;
-        Height = GRAVITY_HEIGHT;
+        Height = COBRA_XGRV_HEIGHT;
         Format = RGBA8;
     };
 
-    texture TEX_GravityDepth
-    {
-        Width  = GRAVITY_WIDTH;
-        Height = GRAVITY_HEIGHT;
-        Format = R32F;
-    };
+    /*     texture TEX_GravityDepth
+        {
+            Width  = GRAVITY_WIDTH;
+            Height = COBRA_XGRV_HEIGHT;
+            Format = R32F;
+        }; */
 
     // Sampler
 
-    sampler2D SAM_GravitySeedMap { Texture = TEX_GravitySeedMap; };
-    sampler2D SAM_GravitySeedMapCopy { Texture = TEX_GravitySeedMapCopy; };
-    sampler2D SAM_GravitySeedMap2 { Texture = TEX_GravitySeedMap2; };
-    sampler2D SAM_GravityCurrentSeed { Texture = TEX_GravityCurrentSettings; };
+    sampler2D SAM_GravitySeedMap
+    {
+        Texture   = TEX_GravitySeedMap;
+        MagFilter = POINT;
+        MinFilter = POINT;
+        MipFilter = POINT;
+    };
+
+    sampler2D SAM_GravitySeedMap2
+    {
+        Texture   = TEX_GravitySeedMap2;
+        MagFilter = POINT;
+        MinFilter = POINT;
+        MipFilter = POINT;
+        // AddressU = REPEAT;
+        // AddressV = REPEAT;
+    };
+    sampler2D SAM_GravityCurrentSettings { Texture = TEX_GravityCurrentSettings; };
 
     sampler2D SAM_GravityMain
     {
@@ -341,18 +409,25 @@ namespace COBRA_XGRV
         MipFilter = POINT;
     };
 
-    sampler2D SAM_GravityDepth
-    {
-        Texture   = TEX_GravityDepth;
-        MagFilter = POINT;
-        MinFilter = POINT;
-        MipFilter = POINT;
-    };
+    /*     sampler2D SAM_GravityDepth
+        {
+            Texture   = TEX_GravityDepth;
+            MagFilter = POINT;
+            MinFilter = POINT;
+            MipFilter = POINT;
+        }; */
 
     // Storage
 
     storage STOR_GravityMain { Texture = TEX_GravityMain; };
-    storage STOR_GravityDepth { Texture = TEX_GravityDepth; };
+    // storage STOR_GravityDepth { Texture = TEX_GravityDepth; };
+
+    // Groupshared Memory
+
+    groupshared uint final_list[COBRA_XGRV_MEMORY_HEIGHT];
+    groupshared float depth_list[COBRA_XGRV_MEMORY_HEIGHT];
+    groupshared float depth_listU[COBRA_XGRV_MEMORY_HEIGHT];
+    groupshared uint strengthen[COBRA_XGRV_MEMORY_HEIGHT];
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////
     //
@@ -360,50 +435,15 @@ namespace COBRA_XGRV
     //
     ////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-    // vector mod
-    float3 mod(float3 x, float y) // x - y * floor(x/y).
-    {
-        return x - y * floor(x / y);
-    }
-
-    // HSV conversions by Sam Hocevar: http://lolengine.net/blog/2013/07/27/rgb-to-hsv-in-glsl
-    float4 rgb2hsv(float4 c)
-    {
-        const float4 K = float4(0.0, -1.0 / 3.0, 2.0 / 3.0, -1.0);
-        float4 p       = lerp(float4(c.bg, K.wz), float4(c.gb, K.xy), step(c.b, c.g));
-        float4 q       = lerp(float4(p.xyw, c.r), float4(c.r, p.yzx), step(p.x, c.r));
-        float d        = q.x - min(q.w, q.y);
-        const float E  = 1.0e-10;
-        return float4(abs(q.z + (q.w - q.y) / (6.0 * d + E)), d / (q.x + E), q.x, 1.0);
-    }
-
-    float4 hsv2rgb(float4 c)
-    {
-        const float4 K = float4(1.0, 2.0 / 3.0, 1.0 / 3.0, 3.0);
-        float3 p       = abs(frac(c.xxx + K.xyz) * 6.0 - K.www);
-        return float4(c.z * lerp(K.xxx, saturate(p - K.xxx), c.y), 1.0);
-    }
-
-    // show the color bar. inspired by originalnicodrs design
-    float4 show_hue(float2 texcoord, float4 fragment)
-    {
-        const float RANGE = 0.145;
-        const float DEPTH = 0.06;
-        if (abs(texcoord.x - 0.5) < RANGE && texcoord.y < DEPTH)
-        {
-            float4 hsv  = float4(saturate(texcoord.x - 0.5 + RANGE) / (2.0 * RANGE), 1.0, 1.0, 1.0);
-            float4 rgb  = hsv2rgb(hsv);
-            bool active = min(abs(hsv.r - UI_Hue), (1.0 - abs(hsv.r - UI_Hue))) < UI_HueRange;
-            fragment    = active ? rgb : float4(0.5, 0.5, 0.5, 1.0);
-        }
-        return fragment;
-    }
+    #define COBRA_UTL_COLOR 1
+    #include ".\CobraUtility.fxh"
+    #undef COBRA_UTL_COLOR
 
     // calculate if pixel is in focus
-    float check_focus(float4 rgb, float scene_depth, float2 texcoord)
+    float check_focus(float3 rgb, float scene_depth, float2 texcoord)
     {
         // colorfilter
-        float4 hsv          = rgb2hsv(rgb);
+        float3 hsv          = rgb2hsv(rgb);
         bool d1             = abs(hsv.b - UI_Value) < UI_ValueRange;
         bool d2             = abs(hsv.r - UI_Hue) < (UI_HueRange + pow(2.71828, -(hsv.g * hsv.g) / 0.005)) || (1.0 - abs(hsv.r - UI_Hue)) < (UI_HueRange + pow(2.71828, -(hsv.g * hsv.g) / 0.01));
         bool d3             = abs(hsv.g - UI_Saturation) <= UI_SaturationRange;
@@ -427,13 +467,9 @@ namespace COBRA_XGRV
         const float2 CENTER = float2(0.675, 0.46);                                  // an interesting center at the mandelbrot for our zoom
         const float ZOOM    = 0.033 * UI_GravityRNG;                                // smaller numbers increase zoom
         const float AR      = float(ReShade::ScreenSize.x) / ReShade::ScreenSize.y; // format to screenspace
-        float2 z, c;
-        c.x = AR * (texcoord.x - 0.5) * ZOOM - CENTER.x;
-        c.y = (texcoord.y - 0.5) * ZOOM - CENTER.y;
-        // c = float2(AR,1.0)*(texcoord-0.5) * ZOOM - CENTER; @TODO Performance
-        int i;
-        z = c;
-
+        float2 c            = float2(AR, 1.0) * (texcoord - 0.5) * ZOOM - CENTER;
+        float2 z            = c;
+        uint i;
         for (i = 0; i < 100; i++)
         {
             float x = z.x * z.x - z.y * z.y + c.x;
@@ -454,142 +490,178 @@ namespace COBRA_XGRV
     //
     ////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-    groupshared uint final_list[GRAVITY_HEIGHT];
-    groupshared float depth_list[GRAVITY_HEIGHT];
-    groupshared float depth_listU[GRAVITY_HEIGHT];
-    groupshared uint strengthen[GRAVITY_HEIGHT];
-
-    void CS_Gravity(uint3 id : SV_DispatchThreadID, uint3 tid : SV_GroupThreadID)
+    void CS_Gravity(uint3 id : SV_DispatchThreadID, uint3 tid : SV_GroupThreadID, uint gi : SV_GroupIndex)
     {
-        for (uint y = 0; y < GRAVITY_HEIGHT; y++)
+        uint max_strength = UI_GravityIntensity * (COBRA_XGRV_HEIGHT - 2.0);
+        uint start        = tid.y * COBRA_XGRV_WORKLOAD;
+        uint finish       = -1 + COBRA_XGRV_WORKLOAD;
+        float x_norm      = (round(id.x * COBRA_XGRV_RES_X) + 0.5) / BUFFER_WIDTH;
+        // At resolutions below 1920x1080 the texture will be too small for hotsampling mode and it looks off
+        // The thread write interval distribution function: We have O(n*n) total required writes split equally
+        const uint F   = COBRA_XGRV_HEIGHT * COBRA_XGRV_WORKLOAD;
+        uint fi_start  = round(sqrt(tid.y * F));
+        uint fi_finish = UI_AllowOverlapping ? COBRA_XGRV_HEIGHT - 1 : round(sqrt((tid.y + 1) * F)) - 1;
+
+        // populate arrays
+        [unroll] for (uint yz = 0; yz <= finish; yz++)
         {
-            // strengthskip[y] = 0;
+            uint y        = yz + start;
+            uint yi       = y + (COBRA_XGRV_HEIGHT - 1 - 2 * y) * UI_InvertGravity;
             final_list[y] = y;
-            depth_list[y] = depth_listU[y] = ReShade::GetLinearizedDepth(float2((id.x * COBRA_XGRV_RES_X + 0.5) / BUFFER_WIDTH, (y * COBRA_XGRV_RES_Y + 0.5) / BUFFER_HEIGHT));
+            depth_list[y] = depth_listU[y] = ReShade::GetLinearizedDepth(float2(x_norm, (round(yi * COBRA_XGRV_RES_Y) + 0.5) / BUFFER_HEIGHT));
+            float3 rgb                     = tex2Dfetch(ReShade::BackBuffer, int2(id.x * COBRA_XGRV_RES_X, yi * COBRA_XGRV_RES_Y)).rgb;
+            float strength                 = tex2Dfetch(SAM_GravitySeedMap, int2(id.x, yi)).r;
+            strength     *= check_focus(rgb, depth_list[y], float2(x_norm, (round(y * COBRA_XGRV_RES_Y) + 0.5) / BUFFER_HEIGHT));
+            strengthen[y] = strength * UI_GravityIntensity * (COBRA_XGRV_HEIGHT - 2.0);
         }
+
+        barrier();
 
         uint paint_iterator = 0;
 
-        for (int y = 0; y < GRAVITY_HEIGHT; y++)
+        // heuristic. close pixel with long dist probably completely cover pixels below which we can then skip
+        uint skip_position = 0;
+        float skip_depth   = 1.0; // PIXEL INDEX, DEPTH
+
+        // apply gravity to array
+        for (uint y = max(0, fi_start - max_strength - 1); y < fi_finish; y++) //< , because last entry only occludes itself
         {
-            uint yi = y + (GRAVITY_HEIGHT - 1 - 2 * y) * UI_InvertGravity;
-            // get your information together
-            float4 rgb        = tex2Dfetch(ReShade::BackBuffer, int2(id.x * COBRA_XGRV_RES_X, yi * COBRA_XGRV_RES_Y)); // access
-            rgb.a             = 1.0;
-            float scene_depth = depth_list[yi];                                                                                                                                                        // access
-            float strength    = tex2Dfetch(SAM_GravitySeedMap, int2(id.x, yi)).r;                                                                                                                      // access
-            strength          = strength * UI_GravityIntensity * check_focus(rgb, scene_depth, float2((id.x * COBRA_XGRV_RES_X + 0.5) / BUFFER_WIDTH, (yi * COBRA_XGRV_RES_Y + 0.5) / BUFFER_HEIGHT)); // access
-            strengthen[yi]    = strength = strength * (GRAVITY_HEIGHT - 2.0);
+            float scene_depth = depth_list[y];
+            uint strength     = strengthen[y];
+
             if (!UI_AllowOverlapping)
             {
                 // normal
-                uint yymax = min(y + strength, GRAVITY_HEIGHT);
-                for (uint yy = y + 1; yy <= yymax; yy++)
+                uint yymax = min(fi_finish, min(y + strength, COBRA_XGRV_HEIGHT - 1));
+                bool skip  = (skip_position >= yymax && skip_depth <= scene_depth || yymax < fi_start);
+                if (skip)
+                    continue;
+
+                if (yymax > skip_position)
                 {
-                    uint yyi           = yy + (GRAVITY_HEIGHT - 1 - 2 * yy) * UI_InvertGravity;
-                    float target_depth = depth_listU[yyi]; // affected
-                    final_list[yyi]    = (target_depth > scene_depth) ? yi : final_list[yyi];
-                    depth_listU[yyi]   = (target_depth > scene_depth) ? depth_list[yi] : depth_listU[yyi]; // affected
-                    // strengthskip[yyi] = (targetdepth > scenedepth) ? yymax - yyi : strengthskip[yyi];
-                    // yyi = (targetdepth > scenedepth) ? yyi : yyi+strengthskip[yyi];
+                    skip_position = yymax;
+                    skip_depth    = scene_depth;
+                }
+
+                for (uint yy = max(y + 1, fi_start); yy <= yymax; yy++)
+                {
+                    if (depth_listU[yy] > scene_depth) // affected
+                    {
+                        final_list[yy]  = y;
+                        depth_listU[yy] = depth_list[y];
+                        // atomicExchange(final_list[yy], y);
+                    }
                 }
             }
             else
             {
-                // version for overlapping
-                if (paint_iterator == y)
-                    paint_iterator++;
-                uint imax = min(y + (uint)strength, GRAVITY_HEIGHT - 1);
-                for (uint i = paint_iterator; i <= imax; i++, paint_iterator++)
-                {
-                    final_list[i + (GRAVITY_HEIGHT - 1 - 2 * i) * UI_InvertGravity]  = yi;
-                    depth_listU[i + (GRAVITY_HEIGHT - 1 - 2 * i) * UI_InvertGravity] = 0.0;
+                if (tid.y == 0)
+                { // version for overlapping is not multithreaded (runs as fast as single thread though)
+                    if (paint_iterator == y)
+                        paint_iterator++;
+
+                    uint imax      = min(y + strength, COBRA_XGRV_HEIGHT - 1);
+                    uint i         = paint_iterator;
+                    paint_iterator = max(paint_iterator, imax);
+
+                    for (i; i <= imax; i++)
+                    {
+                        final_list[i] = y;
+                        // depth_listU[i] = 0.0;
+                    }
                 }
             }
         }
-        for (uint y = 0; y < GRAVITY_HEIGHT; y++)
+
+        barrier();
+
+        uint3 LOCK            = uint3(UI_LockHue, UI_LockSaturation, UI_LockValue);
+        float3 pre_target_hsv = rgb2hsv(UI_EffectTint);
+        pre_target_hsv        = pre_target_hsv * (1 - LOCK);
+        float4 store_val      = 1.0;
+        // store result in the buffer
+        [unroll] for (uint yy = 0; yy <= finish; yy++)
         {
+            uint y  = yy + start;
+            uint fi = final_list[y] + (COBRA_XGRV_HEIGHT - 1 - 2 * final_list[y]) * UI_InvertGravity;
+            uint yi = y + (COBRA_XGRV_HEIGHT - 1 - 2 * y) * UI_InvertGravity;
             if (y != final_list[y])
             {
-                float4 store_val      = tex2Dfetch(ReShade::BackBuffer, int2(id.x, final_list[y] * COBRA_XGRV_RES_Y)); // access
+                store_val.rgb         = tex2Dfetch(ReShade::BackBuffer, int2(id.x, fi * COBRA_XGRV_RES_Y)).rgb; // access
                 float blend_intensity = smoothstep(0.0, strengthen[final_list[y]], distance(y, final_list[y]));
-                store_val.a           = 1.0;
-                store_val             = lerp(store_val, float4(UI_EffectTint, 1.0), blend_intensity * UI_TintIntensity);
-                tex2Dstore(STOR_GravityMain, float2(id.x, y), store_val);
-                tex2Dstore(STOR_GravityDepth, float2(id.x, y), depth_listU[y]);
+                float3 source_hsv     = rgb2hsv(store_val.rgb);
+                float3 target_val     = source_hsv * LOCK + pre_target_hsv;
+                source_hsv.gb = target_val.gb = lerp(source_hsv.gb, target_val.gb, blend_intensity * UI_BlendIntensity);
+                store_val.rgb                 = hsv2rgb(source_hsv);
+                target_val                    = hsv2rgb(target_val);
+                store_val.rgb                 = lerp(store_val.rgb, target_val, blend_intensity * UI_BlendIntensity);
+                tex2Dstore(STOR_GravityMain, float2(id.x, yi), store_val);
+                // tex2Dstore(STOR_GravityDepth, float2(id.x, y), depth_listU[y]);
             }
         }
     }
 
     /// SETUP
 
-    // RNG MAP
     void PS_GenerateRNGSetup(float4 vpos : SV_Position, float2 texcoord : TEXCOORD, out float fragment : SV_Target)
     {
-
-        float value = tex2D(SAM_GravitySeedMap2, texcoord).r;
-        value       = saturate((value - 1.0 + UI_GravityRNG) / UI_GravityRNG);
-        fragment    = (UI_UseImage ? value : mandelbrot_rng(texcoord));
-    }
-
-    void PS_UpdateRNGMapSetup(float4 vpos : SV_Position, float2 texcoord : TEXCOORD, out float fragment : SV_Target)
-    {
-        fragment = tex2D(SAM_GravitySeedMap, texcoord).r;
+        uint2 coords = fmod(vpos.xy * UI_NoiseSize, float2(1920, 1080));
+        coords       = UI_HotsamplingMode ? vpos.xy * float2(1919.0, 1079.0) / (float2(GRAVITY_WIDTH, COBRA_XGRV_HEIGHT) - 1) * UI_NoiseSize : coords;
+        float value  = tex2Dfetch(SAM_GravitySeedMap2, coords).r;
+        value        = saturate((value - 1.0 + UI_GravityRNG) / UI_GravityRNG);
+        fragment     = UI_UseImage ? value : mandelbrot_rng(texcoord.xy);
     }
 
     /// MAIN
 
-    // RNG MAP
-    void PS_GenerateRNG(float4 vpos : SV_Position, float2 texcoord : TEXCOORD, out float fragment : SV_Target)
+    // Generate new RNG if settings have changed
+    vs2ps VS_GenerateRNG(uint id : SV_VertexID)
     {
-        float old_rng = tex2D(SAM_GravityCurrentSeed, float2(0.0, 0.25)).r;
-        old_rng      += tex2D(SAM_GravityCurrentSeed, float2(0.0, 0.75)).r; // @TODO why read twice and add? bug?
-        float new_rng = UI_GravityRNG + ((UI_UseImage) ? 0.01 : 0.0);
-        new_rng      += UI_GravityIntensity;
-        float value   = tex2D(SAM_GravitySeedMap2, texcoord).r;
-        value         = saturate((value - 1.0 + UI_GravityRNG) / UI_GravityRNG);
-        if (abs(old_rng - new_rng) > 0.001)
-        {
-            fragment = (UI_UseImage ? value : mandelbrot_rng(texcoord));
-        }
-        else
-        {
-            fragment = tex2D(SAM_GravitySeedMapCopy, texcoord).r;
-        }
+        float settings = tex2Dfetch(SAM_GravityCurrentSettings, int2(0, 0)).r;
+        float new_rng  = UI_NoiseSize * 1000 + UI_HotsamplingMode + UI_GravityRNG + UI_UseImage * 100;
+        bool renew     = abs(settings - new_rng) > 0.005;
+        vs2ps o        = vs_basic(id, 0.0);
+        if (!renew)
+            o.vpos.xy = 0.0;
+
+        return o;
     }
 
-    void PS_UpdateRNGMap(float4 vpos : SV_Position, float2 texcoord : TEXCOORD, out float fragment : SV_Target)
+    void PS_GenerateRNG(vs2ps o, out float fragment : SV_Target)
     {
-        fragment = tex2D(SAM_GravitySeedMap, texcoord).r;
+        uint2 coords = fmod(o.vpos.xy * UI_NoiseSize, float2(1920, 1080));
+        coords       = UI_HotsamplingMode ? o.vpos.xy * float2(1919.0, 1079.0) / (float2(GRAVITY_WIDTH, COBRA_XGRV_HEIGHT) - 1) * UI_NoiseSize : coords;
+        float value  = tex2Dfetch(SAM_GravitySeedMap2, coords).r;
+        value        = saturate((value - 1.0 + UI_GravityRNG) / UI_GravityRNG);
+        fragment     = UI_UseImage ? value : mandelbrot_rng(o.uv.xy);
     }
 
-    // update current settings - careful with pipeline placement -at the end
+    void VS_Clear(in uint id : SV_VertexID, out float4 position : SV_Position)
+    {
+        position = -3;
+    }
+
+    void PS_Clear(float4 position : SV_Position, out float4 output0 : SV_TARGET0)
+    {
+        output0 = 0;
+        discard;
+    }
+    // update current settings - careful with pipeline placement -> goes at the end
     void PS_UpdateRNGSettings(float4 vpos : SV_Position, float2 texcoord : TEXCOORD, out float fragment : SV_Target)
     {
-        float fragment1 = UI_GravityRNG;
-        fragment1      += UI_UseImage ? 0.01 : 0.0;
-        float fragment2 = UI_GravityIntensity;
-        fragment        = ((texcoord.y < 0.5) ? fragment1 : fragment2);
+        fragment = UI_NoiseSize * 1000 + UI_HotsamplingMode + UI_GravityRNG + UI_UseImage * 100;
     }
 
-    // PRINT
-    void PS_PrepareGravity(float4 vpos : SV_Position, float2 texcoord : TEXCOORD, out float4 fragment : SV_Target)
-    {
-        fragment = float4(0.0, 0.0, 0.0, 0.0); // @TODO Do we really need to apply a constant per pixel, faster ways?
-    }
-
-    void PS_PrepareDepth(float4 vpos : SV_Position, float2 texcoord : TEXCOORD, out float fragment : SV_Target)
-    {
-        fragment = 1.0;
-    }
-
+    // Write to the backbuffer
     void PS_PrintGravity(float4 vpos : SV_Position, float2 texcoord : TEXCOORD, out float4 fragment : SV_Target)
     {
-        fragment            = tex2D(SAM_GravityMain, texcoord);
-        float depth_gravity = tex2D(SAM_GravityDepth, texcoord).r;
-        float depth_pixel   = ReShade::GetLinearizedDepth(texcoord);
-        fragment            = (fragment.a && depth_gravity < depth_pixel) ? fragment : tex2D(ReShade::BackBuffer, texcoord);
-        fragment            = (UI_ShowSelectedHue * UI_FilterColor) ? show_hue(texcoord, fragment) : fragment;
+        fragment = tex2D(SAM_GravityMain, texcoord);
+        // float depth_gravity = tex2D(SAM_GravityDepth, texcoord).r;
+        float depth_pixel = ReShade::GetLinearizedDepth(texcoord);
+        // fragment            = (fragment.a && depth_gravity < depth_pixel) ? fragment : tex2Dfetch(ReShade::BackBuffer, floor(vpos.xy));
+        fragment   = fragment.a ? fragment : tex2Dfetch(ReShade::BackBuffer, floor(vpos.xy));
+        fragment   = (UI_ShowSelectedHue * UI_FilterColor) ? show_hue(texcoord, fragment) : fragment;
+        fragment.a = 1.0;
     }
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -610,13 +682,6 @@ namespace COBRA_XGRV
             PixelShader  = PS_GenerateRNGSetup;
             RenderTarget = TEX_GravitySeedMap;
         }
-
-        pass UpdateRNGMap
-        {
-            VertexShader = PostProcessVS;
-            PixelShader  = PS_UpdateRNGMapSetup;
-            RenderTarget = TEX_GravitySeedMapCopy;
-        }
     }
 
     technique TECH_GravityCS <
@@ -625,48 +690,37 @@ namespace COBRA_XGRV
                        "Gravity_CS.fx lets pixels gravitate towards the bottom of the screen in the game's 3D environment.\n"
                        "You can filter the affected pixels by depth and by color.\n"
                        "It uses a custom seed (currently the Mandelbrot set) to determine the intensity of each pixel.\n"
-                       "Make sure to also test out the texture-RNG variant with the picture 'gravityrng.png' provided\n"
+                       "Make sure to also test out the texture-RNG variant with the picture 'gravity_noise.png' provided\n"
                        "in the Textures folder. You can replace the texture with your own picture, as long as it\n"
                        "is 1920x1080, RGBA8 and has the same name. Only the red-intensity is taken. So either use red\n"
                        "images or greyscale images.\n"
-                       "CS is the compute shader version of Gravity.fx, it works best on resolutions above 1080p.\n"
-                       "At lower resolutions, check out Gravity.fx instead. For additional perfomance, read the\n"
-                       "preprocessor tooltip of GRAVITY_HEIGHT.\n\n"
+                       "CS is the compute shader version of Gravity.fx, it works best on resolutions above 1080p,\n"
+                       "although it can still perform like as Gravity.fx at lower resolutions. For quality-perfomance\n"
+                       "balancing, read the preprocessor tooltip of GRAVITY_HEIGHT.\n\n"
                        "Version:    " COBRA_XGRV_VERSION "\nAuthor:     SirCobra\nCollection: CobraFX\n"
                        "            https://github.com/LordKobra/CobraFX";
     >
     {
         pass GenerateRNG
         {
-            VertexShader = PostProcessVS;
+            VertexShader = VS_GenerateRNG;
             PixelShader  = PS_GenerateRNG;
             RenderTarget = TEX_GravitySeedMap;
         }
 
-        pass UpdateRNGMap
-        {
-            VertexShader = PostProcessVS;
-            PixelShader  = PS_UpdateRNGMap;
-            RenderTarget = TEX_GravitySeedMapCopy;
-        }
-
         pass PrepareGravity
         {
-            VertexShader = PostProcessVS;
-            PixelShader  = PS_PrepareGravity;
-            RenderTarget = TEX_GravityMain;
-        }
-
-        pass PrepareDepth
-        {
-            VertexShader = PostProcessVS;
-            PixelShader  = PS_PrepareDepth;
-            RenderTarget = TEX_GravityDepth;
+            VertexShader       = VS_Clear;
+            PixelShader        = PS_Clear;
+            RenderTarget0      = TEX_GravityMain;
+            ClearRenderTargets = true;
+            PrimitiveTopology  = POINTLIST;
+            VertexCount        = 1;
         }
 
         pass GravityMain
         {
-            ComputeShader = CS_Gravity<1, 1>;
+            ComputeShader = CS_Gravity<1, COBRA_XGRV_THREADS>;
             DispatchSizeX = GRAVITY_WIDTH;
             DispatchSizeY = 1;
         }
@@ -684,5 +738,5 @@ namespace COBRA_XGRV
             PixelShader  = PS_PrintGravity;
         }
     }
-}
 #endif // Shader End
+}
