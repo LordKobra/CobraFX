@@ -1,6 +1,6 @@
 ////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Gravity (Gravity.fx) by SirCobra
-// Version 0.2.1
+// Version 0.2.2
 // You can find info and all my shaders here: https://github.com/LordKobra/CobraFX
 //
 // --------Description---------
@@ -28,7 +28,7 @@
 
 // Defines
 
-#define COBRA_GRV_VERSION "0.2.1"
+#define COBRA_GRV_VERSION "0.2.2"
 #define COBRA_GRV_UI_GENERAL "\n / General Options /\n"
 #define COBRA_GRV_UI_DEPTH "\n /  Depth Options  /\n"
 #define COBRA_GRV_UI_COLOR "\n /  Color Options  /\n"
@@ -47,7 +47,7 @@
     #define COBRA_GRV_COMPUTE 1
 #else
     #define COBRA_GRV_COMPUTE 0
-#warning "Gravity.fx does not work in DirectX 9 games."
+    #warning "Gravity.fx does not work in DirectX 9 games."
 #endif
 
 // Includes
@@ -222,7 +222,7 @@ namespace COBRA_GRV
         Format = R16F;
     };
 
-    texture TEX_GravitySeedMapExt < source = "gravityrng.png";
+    texture TEX_GravitySeedMapExt < source = "gravity_noise.png";
     >
     {
         Width  = 1920;

@@ -1,10 +1,11 @@
 ////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Cobra Utility (CobraUtility.fxh) by SirCobra
-// Version 0.1.0
+// Version 0.1.1
 // You can find info and all my shaders here: https://github.com/LordKobra/CobraFX
 //
 // --------Description---------
 // This header file contains useful functions and definitions for other shaders to use.
+//
 // ----------Credits-----------
 // The credits are written above the functions.
 ////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -28,7 +29,12 @@
 ////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 // vector mod and normal fmod
+#undef fmod
 #define fmod(x, y) (frac((x)*rcp(y)) * (y))
+
+#undef ROUNDUP
+#define ROUNDUP(x, y) ((x - 1) / y + 1)
+
 
 struct vs2ps
 {
@@ -55,21 +61,21 @@ float atan2_approx(float y, float x)
 #if COBRA_UTL_COLOR
 
 // HSV conversions by Sam Hocevar: http://lolengine.net/blog/2013/07/27/rgb-to-hsv-in-glsl
-float4 rgb2hsv(float4 c)
+float3 rgb2hsv(float3 c)
 {
     const float4 K = float4(0.0, -1.0 / 3.0, 2.0 / 3.0, -1.0);
     float4 p       = lerp(float4(c.bg, K.wz), float4(c.gb, K.xy), step(c.b, c.g));
     float4 q       = lerp(float4(p.xyw, c.r), float4(c.r, p.yzx), step(p.x, c.r));
     float d        = q.x - min(q.w, q.y);
     const float E  = 1.0e-10;
-    return float4(abs(q.z + (q.w - q.y) / (6.0 * d + E)), d / (q.x + E), q.x, 1.0);
+    return float3(abs(q.z + (q.w - q.y) / (6.0 * d + E)), d / (q.x + E), q.x);
 }
 
-float4 hsv2rgb(float4 c)
+float3 hsv2rgb(float3 c)
 {
     const float4 K = float4(1.0, 2.0 / 3.0, 1.0 / 3.0, 3.0);
     float3 p       = abs(frac(c.xxx + K.xyz) * 6.0 - K.www);
-    return float4(c.z * lerp(K.xxx, saturate(p - K.xxx), c.y), 1.0);
+    return float3(c.z * lerp(K.xxx, saturate(p - K.xxx), c.y));
 }
 
 // show the color bar. inspired by originalnicodrs design
@@ -79,10 +85,10 @@ float4 show_hue(float2 texcoord, float4 fragment)
     const float DEPTH = 0.06;
     if (abs(texcoord.x - 0.5) < RANGE && texcoord.y < DEPTH)
     {
-        float4 hsv  = float4(saturate(texcoord.x - 0.5 + RANGE) / (2.0 * RANGE), 1.0, 1.0, 1.0);
-        float4 rgb  = hsv2rgb(hsv);
-        bool active = min(abs(hsv.r - UI_Hue), (1.0 - abs(hsv.r - UI_Hue))) < UI_HueRange;
-        fragment    = active ? rgb : float4(0.5, 0.5, 0.5, 1.0);
+        float3 hsv   = float3(saturate(texcoord.x - 0.5 + RANGE) / (2.0 * RANGE), 1.0, 1.0);
+        float3 rgb   = hsv2rgb(hsv);
+        bool active  = min(abs(hsv.r - UI_Hue), (1.0 - abs(hsv.r - UI_Hue))) < UI_HueRange;
+        fragment.rgb = active ? rgb : 0.5;
     }
     return fragment;
 }

@@ -1,6 +1,6 @@
 ////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Cobra Mask (CobraMask.fx) by SirCobra
-// Version 0.2.2
+// Version 0.2.3
 // You can find info and all my shaders here: https://github.com/LordKobra/CobraFX
 //
 // --------Description---------
@@ -27,7 +27,7 @@
 // Shader Start
 // Defines
 
-#define COBRA_MSK_VERSION "0.2.2"
+#define COBRA_MSK_VERSION "0.2.3"
 #define COBRA_MSK_UI_GENERAL "\n / General Options /\n"
 #define COBRA_MSK_UI_COLOR "\n /  Color Masking  /\n"
 #define COBRA_MSK_UI_DEPTH "\n /  Depth Masking  /\n"
@@ -252,10 +252,10 @@ namespace COBRA_MSK
     #undef COBRA_UTL_COLOR
 
     // returns a value between 0 and 1 (1 = in focus)
-    float check_focus(float4 rgb, float scene_depth, float2 texcoord)
+    float check_focus(float3 rgb, float scene_depth, float2 texcoord)
     {
         // colorfilter
-        float4 hsv           = rgb2hsv(rgb);
+        float3 hsv           = rgb2hsv(rgb);
         float d1_f           = abs(hsv.b - UI_Value) - UI_ValueRange;
         d1_f                 = 1.0 - smoothstep(0.0, UI_ValueEdge, d1_f);
         bool d2              = abs(hsv.r - UI_Hue) < (UI_HueRange + pow(2.71828, -(hsv.g * hsv.g) / 0.005)) || (1.0 - abs(hsv.r - UI_Hue)) < (UI_HueRange + pow(2.71828, -(hsv.g * hsv.g) / 0.01));
@@ -284,8 +284,8 @@ namespace COBRA_MSK
     {
         float4 color   = tex2Dfetch(ReShade::BackBuffer, floor(vpos.xy));
         float depth    = ReShade::GetLinearizedDepth(texcoord);
-        float in_focus = check_focus(color, depth, texcoord);
-        in_focus       = lerp(in_focus, 1 - in_focus, UI_InvertMask); // in_focus - 2UI*focus + UI
+        float in_focus = check_focus(color.rgb, depth, texcoord);
+        in_focus       = lerp(in_focus, 1 - in_focus, UI_InvertMask);
         fragment       = float4(color.rgb, in_focus);
     }
 
