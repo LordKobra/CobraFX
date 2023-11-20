@@ -33,8 +33,8 @@ uniform float timer <
 #define COBRA_RLE_UI_GENERAL "\n / General Options /\n"
 #define COBRA_RLE_TIME_MAX 16777216 // 2^24 because of 23 bit fraction plus 'implicit leading bit'
 
-// Optional Compute Shader Support
-#if (((__RENDERER__ >= 0xb000 && __RENDERER__ < 0x10000) || (__RENDERER__ >= 0x14300)) && __RESHADE__ >= 40800)
+// Optional Compute Shader Support and R32I support from ReShade 5.9
+#if (((__RENDERER__ >= 0xb000 && __RENDERER__ < 0x10000) || (__RENDERER__ >= 0x14300)) && __RESHADE__ >= 50900)
     #define COBRA_RLE_COMPUTE 1
 #else
     #define COBRA_RLE_COMPUTE 0
