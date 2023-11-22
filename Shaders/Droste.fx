@@ -1,32 +1,34 @@
 ////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Droste Effect (Droste.fx) by SirCobra
-// Version 0.4.2
+// Version 0.4.3
 // You can find info and all my shaders here: https://github.com/LordKobra/CobraFX
 //
 // --------Description---------
 // The Droste effect warps the image-space to recursively appear within itself.
 ////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-////////////////////////////////////////////////////////////////////////////////////////////////////////
-//
-//                                            Defines & UI
-//
-////////////////////////////////////////////////////////////////////////////////////////////////////////
+#include "Reshade.fxh"
 
 // Shader Start
-// Defines
-
-#define COBRA_DRO_VERSION "0.4.2"
-#define COBRA_DRO_UI_GENERAL "\n / General Options /\n"
-
-// Includes
-
-#include "Reshade.fxh"
 
 // Namespace Everything!
 
 namespace COBRA_DRO
 {
+
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////
+    //
+    //                                            Defines & UI
+    //
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+    // Defines
+
+    #define COBRA_DRO_VERSION "0.4.3"
+
+    #define COBRA_UTL_MODE 0
+    #include ".\CobraUtility.fxh"
+
     // UI
 
     uniform int UI_EffectType <
@@ -35,14 +37,14 @@ namespace COBRA_DRO
         ui_spacing   = 2;
         ui_items     = "Circular\0Rectangular\0";
         ui_tooltip   = "Shape of the recursive appearance.";
-        ui_category  = COBRA_DRO_UI_GENERAL;
+        ui_category  = COBRA_UTL_UI_GENERAL;
     >                = 0;
 
     uniform bool UI_Spiral <
         ui_label     = " Spiral";
         ui_spacing   = 2;
         ui_tooltip   = "Warp space into a spiral.";
-        ui_category  = COBRA_DRO_UI_GENERAL;
+        ui_category  = COBRA_UTL_UI_GENERAL;
     >                = true;
 
     uniform float UI_OuterRing <
@@ -52,7 +54,7 @@ namespace COBRA_DRO
         ui_max       = 1.00;
         ui_step      = 0.01;
         ui_tooltip   = "The outer ring defines the texture border towards the edge of the screen.";
-        ui_category  = COBRA_DRO_UI_GENERAL;
+        ui_category  = COBRA_UTL_UI_GENERAL;
     >                = 1.00;
 
     uniform float UI_Zoom <
@@ -62,7 +64,7 @@ namespace COBRA_DRO
         ui_max       = 9.90;
         ui_step      = 0.01;
         ui_tooltip   = "Zoom into the output.";
-        ui_category  = COBRA_DRO_UI_GENERAL;
+        ui_category  = COBRA_UTL_UI_GENERAL;
     >                = 1.00;
 
     uniform float UI_Frequency <
@@ -72,7 +74,7 @@ namespace COBRA_DRO
         ui_max       = 5.00;
         ui_step      = 0.01;
         ui_tooltip   = "Defines the frequency of the recursion.";
-        ui_category  = COBRA_DRO_UI_GENERAL;
+        ui_category  = COBRA_UTL_UI_GENERAL;
     >                = 1.00;
 
     uniform float UI_X_Offset <
@@ -82,7 +84,7 @@ namespace COBRA_DRO
         ui_max       = 0.50;
         ui_step      = 0.01;
         ui_tooltip   = "Change the horizontal position of the center. Keep it at 0 to get the best results.";
-        ui_category  = COBRA_DRO_UI_GENERAL;
+        ui_category  = COBRA_UTL_UI_GENERAL;
     >                = 0.00;
 
     uniform float UI_Y_Offset <
@@ -92,7 +94,7 @@ namespace COBRA_DRO
         ui_max       = 0.50;
         ui_step      = 0.01;
         ui_tooltip   = "Change the Y position of the center. Keep it at 0 to get the best results.";
-        ui_category  = COBRA_DRO_UI_GENERAL;
+        ui_category  = COBRA_UTL_UI_GENERAL;
     >                = 0.00;
 
     uniform int UI_BufferEnd <
@@ -108,9 +110,8 @@ namespace COBRA_DRO
     //
     ////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-    #define COBRA_UTL_COLOR 0
+    #define COBRA_UTL_MODE 2
     #include ".\CobraUtility.fxh"
-    #undef COBRA_UTL_COLOR
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////
     //

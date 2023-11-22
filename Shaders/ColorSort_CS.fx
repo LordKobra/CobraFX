@@ -1,6 +1,6 @@
 ////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Color Sort (Colorsort_CS.fx) by SirCobra
-// Version 0.5.1
+// Version 0.5.2
 // You can find info and all my shaders here: https://github.com/LordKobra/CobraFX
 //
 // --------Description---------
@@ -16,52 +16,48 @@
 // The multithreaded merge sort is constructed as described here: https://www.nvidia.in/docs/IO/67073/nvr-2008-001.pdf
 ////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-////////////////////////////////////////////////////////////////////////////////////////////////////////
-//
-//                                            Defines & UI
-//
-////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-// Defines
-
-#define COBRA_XCOL_VERSION "0.5.1"
-#define COBRA_XCOL_UI_GENERAL "\n / General Options /\n"
-#define COBRA_XCOL_UI_DEPTH "\n /  Depth Masking  /\n"
-#define COBRA_XCOL_UI_COLOR "\n /  Color Masking  /\n"
-
-#ifndef M_PI
-    #define M_PI 3.1415927
-#endif
-
-#ifndef COLOR_HEIGHT
-    #define COLOR_HEIGHT 10 // maybe needs multiple of 64 :/
-#endif
-
-#define COBRA_XCOL_THREADS ((uint)16) // 2^n
-#define COBRA_XCOL_HEIGHT (COLOR_HEIGHT % 15) * 64
-#define COBRA_XCOL_NOISE_WIDTH 4096
-#define COBRA_XCOL_NOISE_HEIGHT 1024
-
-// We need Compute Shader Support
-#if (((__RENDERER__ >= 0xb000 && __RENDERER__ < 0x10000) || (__RENDERER__ >= 0x14300)) && __RESHADE__ >= 40800)
-    #define COBRA_XCOL_COMPUTE 1
-#else
-    #define COBRA_XCOL_COMPUTE 0
-    #warning "ColorSort_CS.fx does only work with ReShade 4.8 or newer, DirectX 11 or newer, OpenGL 4.3 or newer and Vulkan."
-#endif
-
-// Includes
-
 #include "Reshade.fxh"
 
 // Shader Start
 
-#if COBRA_XCOL_COMPUTE != 0
-
-// Namespace everything!
+//  Namespace everything!
 
 namespace COBRA_XCOL
 {
+
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////
+    //
+    //                                            Defines & UI
+    //
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+    // Defines
+
+    #define COBRA_XCOL_VERSION "0.5.2"
+    #define COBRA_UTL_MODE 0
+    #include ".\CobraUtility.fxh"
+
+    #ifndef COLOR_HEIGHT
+        #define COLOR_HEIGHT 10 // maybe needs multiple of 64 :/
+    #endif
+
+    #define COBRA_XCOL_THREADS ((uint)16) // 2^n
+    #define COBRA_XCOL_HEIGHT (COLOR_HEIGHT) * 64
+    #define COBRA_XCOL_NOISE_WIDTH 4096
+    #define COBRA_XCOL_NOISE_HEIGHT 1024
+
+    // We need Compute Shader Support
+    #if (((__RENDERER__ >= 0xb000 && __RENDERER__ < 0x10000) || (__RENDERER__ >= 0x14300)) && __RESHADE__ >= 40800)
+        #define COBRA_XCOL_COMPUTE 1
+    #else
+        #define COBRA_XCOL_COMPUTE 0
+        #warning "ColorSort_CS.fx does only work with ReShade 4.8 or newer, DirectX 11 or newer, OpenGL 4.3 or newer and Vulkan."
+    #endif
+
+    #if COBRA_XCOL_COMPUTE != 0
+
+    // Includes
+
     // UI
 
     uniform uint UI_RotationAngle <
@@ -73,7 +69,7 @@ namespace COBRA_XCOL
         ui_units     = "°";
         ui_step      = 1;
         ui_tooltip   = "Rotation of the sorting axis.";
-        ui_category  = COBRA_XCOL_UI_GENERAL;
+        ui_category  = COBRA_UTL_UI_GENERAL;
     >                = 0;
 
     uniform float UI_BrightnessThresholdStart <
@@ -82,8 +78,9 @@ namespace COBRA_XCOL
         ui_min       = -0.050;
         ui_max       = 1.050;
         ui_step      = 0.001;
-        ui_tooltip   = "Pixels with brightness close to this parameter serve as starting threshold for the sorting algorithm and\nfragment the area. Set both sliders to their maximum value to disable them.";
-        ui_category  = COBRA_XCOL_UI_GENERAL;
+        ui_tooltip   = "Pixels with brightness close to this parameter serve as starting threshold for the sorting\n"
+                       "algorithm and fragment the area. Set both sliders to their maximum value to disable them.";
+        ui_category  = COBRA_UTL_UI_GENERAL;
     >                = 1.050;
 
     uniform float UI_BrightnessThresholdEnd <
@@ -92,8 +89,9 @@ namespace COBRA_XCOL
         ui_min       = -0.050;
         ui_max       = 1.050;
         ui_step      = 0.001;
-        ui_tooltip   = "Pixels with brightness close to this parameter serve as finishing threshold for the sorting algorithm and\nfragment the area. Set both sliders to their maximum value to disable them.";
-        ui_category  = COBRA_XCOL_UI_GENERAL;
+        ui_tooltip   = "Pixels with brightness close to this parameter serve as finishing threshold for the sorting\n"
+                       "algorithm and fragment the area. Set both sliders to their maximum value to disable them.";
+        ui_category  = COBRA_UTL_UI_GENERAL;
     >                = 1.050;
 
     uniform float UI_GradientStrength <
@@ -102,8 +100,10 @@ namespace COBRA_XCOL
         ui_min       = 0.000;
         ui_max       = 1.000;
         ui_step      = 0.001;
-        ui_tooltip   = "Strength of the noise applied to the masked area. More noise results in more brightness variance.\nOnly recommended in monotone environments. For color gradients on the sorted area, better apply\nother effects between Masking and Main effect order.";
-        ui_category  = COBRA_XCOL_UI_GENERAL;
+        ui_tooltip   = "Strength of the noise applied to the masked area. More noise results in more brightness variance.\n"
+                       "Only recommended in monotone environments. For color gradients on the sorted area, better apply\n"
+                       "other effects between Masking and Main effect order.";
+        ui_category  = COBRA_UTL_UI_GENERAL;
     >                = 0.000;
 
     uniform float UI_MaskingNoise <
@@ -113,7 +113,7 @@ namespace COBRA_XCOL
         ui_max       = 1.001;
         ui_step      = 0.001;
         ui_tooltip   = "Strength of the noise applied to mask itself.";
-        ui_category  = COBRA_XCOL_UI_GENERAL;
+        ui_category  = COBRA_UTL_UI_GENERAL;
     >                = 0.000;
 
     uniform float UI_NoiseSize <
@@ -123,169 +123,28 @@ namespace COBRA_XCOL
         ui_max       = 1.000;
         ui_step      = 0.001;
         ui_tooltip   = "Size of the noise texture. A lower value means larger noise pixels.";
-        ui_category  = COBRA_XCOL_UI_GENERAL;
+        ui_category  = COBRA_UTL_UI_GENERAL;
     >                = 1.000;
 
     uniform bool UI_ReverseSort <
         ui_label     = " Reverse Sorting";
         ui_tooltip   = "While active, it sorts from dark to bright. Otherwise it will sort from bright to dark.";
-        ui_category  = COBRA_XCOL_UI_GENERAL;
-    >                = false;
-
-    uniform bool UI_InvertMask <
-        ui_label     = " Invert Mask";
-        ui_tooltip   = "Invert the mask.";
-        ui_category  = COBRA_XCOL_UI_GENERAL;
-    >                = false;
-
-    uniform bool UI_ShowMask <
-        ui_label     = " Show Mask";
-        ui_tooltip   = "Show the masked pixels. White areas will be preserved, black/grey areas can be affected by the shaders\nencompassed. Dark grey pixels show the noise pattern. Light grey pixels show brightness thresholds.";
-        ui_category  = COBRA_XCOL_UI_GENERAL;
+        ui_category  = COBRA_UTL_UI_GENERAL;
     >                = false;
 
     uniform bool UI_HotsamplingMode <
         ui_label     = " Hotsampling Mode";
-        ui_tooltip   = "The noise will be the same at all resolutions. Activate this, then adjust your options\nand it will stay the same at all resolutions. Turn this off when you do not intend\nto hotsample.";
-        ui_category  = COBRA_XCOL_UI_GENERAL;
+        ui_tooltip   = "The noise will be the same at all resolutions. Activate this, then adjust your options\n"
+                       "and it will stay the same at all resolutions. Turn this off when you do not intend\nto hotsample.";
+        ui_category  = COBRA_UTL_UI_GENERAL;
     >                = false;
 
-    uniform bool UI_FilterColor <
-        ui_label     = " Filter by Color";
-        ui_spacing   = 2;
-        ui_tooltip   = "Activates the color masking option.";
-        ui_category  = COBRA_XCOL_UI_COLOR;
-    >                = true;
-
-    uniform bool UI_ShowSelectedHue <
-        ui_label     = " Show Selected Hue";
-        ui_tooltip   = "Display the currently selected hue range at the top of the image.";
-        ui_category  = COBRA_XCOL_UI_COLOR;
-    >                = false;
-
-    uniform float UI_Value <
-        ui_label     = " Value";
-        ui_type      = "slider";
-        ui_min       = 0.000;
-        ui_max       = 1.001;
-        ui_step      = 0.001;
-        ui_tooltip   = "The value describes the brightness of the hue. 0 is black/no hue and 1 is maximum hue (e.g. pure red).";
-        ui_category  = COBRA_XCOL_UI_COLOR;
-    >                = 1.001;
-
-    uniform float UI_ValueRange <
-        ui_label     = " Value Range";
-        ui_type      = "slider";
-        ui_min       = 0.000;
-        ui_max       = 1.001;
-        ui_step      = 0.001;
-        ui_tooltip   = "The tolerance around the value.";
-        ui_category  = COBRA_XCOL_UI_COLOR;
-    >                = 1.001;
-
-    uniform float UI_Hue <
-        ui_label     = " Hue";
-        ui_type      = "slider";
-        ui_min       = 0.000;
-        ui_max       = 1.000;
-        ui_step      = 0.001;
-        ui_tooltip   = "The hue describes the color category. It can be red, green, blue or a mix of them.";
-        ui_category  = COBRA_XCOL_UI_COLOR;
-    >                = 1.000;
-
-    uniform float UI_HueRange <
-        ui_label     = " Hue Range";
-        ui_type      = "slider";
-        ui_min       = 0.000;
-        ui_max       = 0.500;
-        ui_step      = 0.001;
-        ui_tooltip   = "The tolerance around the hue.";
-        ui_category  = COBRA_XCOL_UI_COLOR;
-    >                = 0.500;
-
-    uniform float UI_Saturation <
-        ui_label     = " Saturation";
-        ui_type      = "slider";
-        ui_min       = 0.000;
-        ui_max       = 1.000;
-        ui_step      = 0.001;
-        ui_tooltip   = "The saturation determines the colorfulness. 0 is greyscale and 1 pure colors.";
-        ui_category  = COBRA_XCOL_UI_COLOR;
-    >                = 1.000;
-
-    uniform float UI_SaturationRange <
-        ui_label     = " Saturation Range";
-        ui_type      = "slider";
-        ui_min       = 0.000;
-        ui_max       = 1.000;
-        ui_step      = 0.001;
-        ui_tooltip   = "The tolerance around the saturation.";
-        ui_category  = COBRA_XCOL_UI_COLOR;
-    >                = 1.000;
-
-    uniform bool UI_FilterDepth <
-        ui_label     = " Filter By Depth";
-        ui_spacing   = 2;
-        ui_tooltip   = "Activates the depth masking option.";
-        ui_category  = COBRA_XCOL_UI_DEPTH;
-    >                = false;
-
-    uniform float UI_FocusDepth <
-        ui_label     = " Focus Depth";
-        ui_type      = "slider";
-        ui_min       = 0.000;
-        ui_max       = 1.000;
-        ui_step      = 0.001;
-        ui_tooltip   = "Manual focus depth of the point which has the focus. Ranges from 0.0, which means camera is the focus plane,\ntill 1.0 which means the horizon is the focus plane.";
-        ui_category  = COBRA_XCOL_UI_DEPTH;
-    >                = 0.030;
-
-    uniform float UI_FocusRangeDepth <
-        ui_label     = " Focus Range";
-        ui_type      = "slider";
-        ui_min       = 0.0;
-        ui_max       = 1.000;
-        ui_step      = 0.001;
-        ui_tooltip   = "The range of the depth around the manual focus which should still be in focus.";
-        ui_category  = COBRA_XCOL_UI_DEPTH;
-    >                = 0.020;
-
-    uniform bool UI_Spherical <
-        ui_label     = " Spherical Focus";
-        ui_tooltip   = "Enables the mask in a sphere around the focus-point instead of a 2D plane.";
-        ui_category  = COBRA_XCOL_UI_DEPTH;
-    >                = false;
-
-    uniform int UI_SphereFieldOfView <
-        ui_label     = " Spherical Field of View";
-        ui_type      = "slider";
-        ui_min       = 1;
-        ui_max       = 180;
-        ui_units     = "°";
-        ui_tooltip   = "Specifies the estimated Field of View you are currently playing with. Range from 1°,\ntill 180° (half the scene). Normal games tend to use values between 60° and 90°.";
-        ui_category  = COBRA_XCOL_UI_DEPTH;
-    >                = 75;
-
-    uniform float UI_SphereFocusHorizontal <
-        ui_label     = " Spherical Horizontal Focus";
-        ui_type      = "slider";
-        ui_min       = 0.0;
-        ui_max       = 1.0;
-        ui_tooltip   = "Specifies the location of the focuspoint on the horizontal axis. Range from 0, which means left\nscreen border, till 1 which means right screen border.";
-        ui_category  = COBRA_XCOL_UI_DEPTH;
-    >                = 0.5;
-
-    uniform float UI_SphereFocusVertical <
-        ui_label     = " Spherical Vertical Focus";
-        ui_type      = "slider";
-        ui_min       = 0.0;
-        ui_max       = 1.0;
-        ui_tooltip   = "Specifies the location of the focuspoint on the vertical axis. Range from 0, which means upper\nscreen border, till 1 which means bottom screen border.";
-        ui_category  = COBRA_XCOL_UI_DEPTH;
-    >                = 0.5;
+    #define COBRA_UTL_MODE 1
+    #define COBRA_UTL_HIDE_FADE true
+    #include ".\CobraUtility.fxh"
 
     uniform int UI_BufferEnd <
-        ui_type     = "radio";
+        ui_type = "radio";
         ui_spacing  = 2;
         ui_text     = " Preprocessor Options:\n * COLOR_HEIGHT (default value: 10) multiplied by 64 defines the resolution of the effect along the sorting axis. The value needs to be integer. Smaller values give performance at cost of visual fidelity. 8: Performance, 10: Default, 12: Good, 14: High\n\n"
                       " Shader Version: " COBRA_XCOL_VERSION;
@@ -374,152 +233,68 @@ namespace COBRA_XCOL
     //
     ////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-    // vector mod and normal fmod
-    float3 mod(float3 x, float y)
-    {
-        return x - y * floor(x / y);
-    }
-
-    float fmod(float x, float y)
-    {
-        return x - y * floor(x / y);
-    }
-
-    // HSV conversions by Sam Hocevar: http://lolengine.net/blog/2013/07/27/rgb-to-hsv-in-glsl
-    float4 rgb2hsv(float4 c)
-    {
-        const float4 K = float4(0.0, -1.0 / 3.0, 2.0 / 3.0, -1.0);
-        float4 p       = lerp(float4(c.bg, K.wz), float4(c.gb, K.xy), step(c.b, c.g));
-        float4 q       = lerp(float4(p.xyw, c.r), float4(c.r, p.yzx), step(p.x, c.r));
-        float d        = q.x - min(q.w, q.y);
-        const float E  = 1.0e-10;
-        return float4(abs(q.z + (q.w - q.y) / (6.0 * d + E)), d / (q.x + E), q.x, 1.0);
-    }
-
-    float4 hsv2rgb(float4 c)
-    {
-        const float4 K = float4(1.0, 2.0 / 3.0, 1.0 / 3.0, 3.0);
-        float3 p       = abs(frac(c.xxx + K.xyz) * 6.0 - K.www);
-        return float4(c.z * lerp(K.xxx, saturate(p - K.xxx), c.y), 1.0);
-    }
-
-    // show the color bar. inspired by originalnicodrs design
-    float4 show_hue(float2 texcoord, float4 fragment)
-    {
-        const float RANGE = 0.145;
-        const float DEPTH = 0.06;
-        if (abs(texcoord.x - 0.5) < RANGE && texcoord.y < DEPTH)
-        {
-            float4 hsv  = float4(saturate(texcoord.x - 0.5 + RANGE) / (2.0 * RANGE), 1.0, 1.0, 1.0);
-            float4 rgb  = hsv2rgb(hsv);
-            bool active = min(abs(hsv.r - UI_Hue), (1.0 - abs(hsv.r - UI_Hue))) < UI_HueRange;
-            fragment    = active ? rgb : float4(0.5, 0.5, 0.5, 1.0);
-        }
-        return fragment;
-    }
+    #define COBRA_UTL_MODE 2
+    #define COBRA_UTL_COLOR 1
+    #include "CobraUtility.fxh"
 
     // rotate the screen
-    float2 rotate(float2 texcoord, uint angle, bool revert)
+    float2 rotate(float2 texcoord, bool revert)
     {
-        //@TODO angle is UI_RotationAngle -> gives us a constant evaluation instead of variable
+        uint ANGLE     = UI_RotationAngle;
         float2 rotated = texcoord;
         // easy cases to avoid dividing by zero; values 0 & 360 are trivial
-        rotated = (angle == 90) ? float2(texcoord.y, texcoord.x) : rotated;
-        rotated = (angle == 180) ? float2(1 - texcoord.x, 1 - texcoord.y) : rotated;
-        rotated = (angle == 270) ? float2(1 - texcoord.y, 1 - texcoord.x) : rotated;
+        rotated = (ANGLE == 90) ? float2(texcoord.y, texcoord.x) : rotated;
+        rotated = (ANGLE == 180) ? float2(1 - texcoord.x, 1 - texcoord.y) : rotated;
+        rotated = (ANGLE == 270) ? float2(1 - texcoord.y, 1 - texcoord.x) : rotated;
 
         // harder cases
-        if (!(angle == 0 || angle == 90 || angle == 180 || angle == 270 || angle == 360))
+        if (!((ANGLE) % 90 == 0))
         {
             // neccessary transformations from picture coordinates to normal coordinate system for better visualization of the concept
-            angle     = fmod(angle + 180, 360); // we only need to rotate the angle, because although texcoord is inverted applying it twice fixes it.
-            float phi = angle * M_PI / 180.0;
+            ANGLE           = fmod(ANGLE + 180, 360); // we only need to rotate the angle, because although texcoord is inverted applying it twice fixes it.
+            const float PHI = ANGLE * M_PI / 180.0;
 
-            // rotate the borders @TODO can we vectorize please?
-            float2 p00 = float2(0.0, 0.0); // 0
-            float2 p01 = float2(0.0, 1.0); // 1
-            float2 p10 = float2(1.0, 0.0); // 2
-            float2 p11 = float2(1.0, 1.0); // 3
-            p00        = float2(cos(phi) * p00.x - sin(phi) * p00.y, sin(phi) * p00.x + cos(phi) * p00.y);
-            p01        = float2(cos(phi) * p01.x - sin(phi) * p01.y, sin(phi) * p01.x + cos(phi) * p01.y);
-            p10        = float2(cos(phi) * p10.x - sin(phi) * p10.y, sin(phi) * p10.x + cos(phi) * p10.y);
-            p11        = float2(cos(phi) * p11.x - sin(phi) * p11.y, sin(phi) * p11.x + cos(phi) * p11.y);
+            // rotate the borders
+            const float3 P01 = float3(0.0, 1.0, -1.0);
+
+            // 00 -> x 01 -> y 10 -> z 11 -> w
+            float2 PHISC;
+            sincos(PHI, PHISC.x, PHISC.y);
+            const float4 X = PHISC.y * P01.xxyy - PHISC.x * P01.xyxy;
+            const float4 Y = PHISC.x * P01.xxyy + PHISC.y * P01.xyxy;
 
             // find min and max values
-            uint l, r;
-            float lval, rval;
-            lval = p00.x;
-            rval = p00.y;
-            l    = 0;
-            r    = 0;
-            l    = (p01.x < lval) ? 1 : l;
-            lval = (p01.x < lval) ? p01.x : lval;
-            r    = (p01.x > rval) ? 1 : r;
-            rval = (p01.x > rval) ? p01.x : rval;
-            l    = (p10.x < lval) ? 2 : l;
-            lval = (p10.x < lval) ? p10.x : lval;
-            r    = (p10.x > rval) ? 2 : r;
-            rval = (p10.x > rval) ? p10.x : rval;
-            l    = (p11.x < lval) ? 3 : l;
-            lval = (p11.x < lval) ? p11.x : lval;
-            r    = (p11.x > rval) ? 3 : r;
-            rval = (p11.x > rval) ? p11.x : rval;
+            const float LVAL = min(min(X.x, X.y), min(X.z, X.w));
+            const float RVAL = max(max(X.x, X.y), max(X.z, X.w));
 
             // REVERT ?
-            float current_x     = revert ? float2(cos(phi) * texcoord.x - sin(phi) * texcoord.y, sin(phi) * texcoord.x + cos(phi) * texcoord.y).x : lval + texcoord.x * (rval - lval); //  just rotate x or interpolate between rotation start and end and find correct x: lval - x*lval + x*rval = lval + x(rval-lval)
-            float current_x_rel = abs(lval - current_x) / abs(lval - rval);
-            float current_y     = float2(cos(phi) * texcoord.x - sin(phi) * texcoord.y, sin(phi) * texcoord.x + cos(phi) * texcoord.y).y;
+            float2 current      = PHISC.yx * texcoord.xx + P01.zy * PHISC.xy * texcoord.yy;
+            current.x           = revert ? current.x : LVAL + texcoord.x * (RVAL - LVAL);
+            float current_x_rel = abs(LVAL - current.x) / abs(LVAL - RVAL);
 
             // there exist 4 borders, find the intersections
             //  0-1 0-2 1-3 2-3
-            float3 ylow  = 1000.0;
-            float3 yhigh = -1000.0;
-            // 0-1
-            float x_rel = abs(p00.x - current_x) / abs(p00.x - p01.x);
-            float y_abs = (1.0 - x_rel) * p00.y + x_rel * p01.y;
-            ylow        = ((p00.x < current_x && current_x < p01.x) || (p00.x > current_x && current_x > p01.x)) ? float3(0.0, x_rel, y_abs) : ylow;
-            yhigh       = ((p00.x < current_x && current_x < p01.x) || (p00.x > current_x && current_x > p01.x)) ? ylow : yhigh;
-            // 0-2
-            x_rel = abs(p00.x - current_x) / abs(p00.x - p10.x);
-            y_abs = (1.0 - x_rel) * p00.y + x_rel * p10.y;
-            ylow  = ((p00.x < current_x && current_x < p10.x) || (p00.x > current_x && current_x > p10.x)) && (y_abs < ylow.z) ? float3(x_rel, 0.0, y_abs) : ylow;
-            yhigh = ((p00.x < current_x && current_x < p10.x) || (p00.x > current_x && current_x > p10.x)) && (y_abs > yhigh.z) ? float3(x_rel, 0.0, y_abs) : yhigh;
-            // 1-3
-            x_rel = abs(p01.x - current_x) / abs(p01.x - p11.x);
-            y_abs = (1.0 - x_rel) * p01.y + x_rel * p11.y;
-            ylow  = ((p01.x < current_x && current_x < p11.x) || (p01.x > current_x && current_x > p11.x)) && (y_abs < ylow.z) ? float3(x_rel, 1.0, y_abs) : ylow;
-            yhigh = ((p01.x < current_x && current_x < p11.x) || (p01.x > current_x && current_x > p11.x)) && (y_abs > yhigh.z) ? float3(x_rel, 1.0, y_abs) : yhigh;
-            // 2-3
-            x_rel = abs(p10.x - current_x) / abs(p10.x - p11.x);
-            y_abs = (1.0 - x_rel) * p10.y + x_rel * p11.y;
-            ylow  = ((p10.x < current_x && current_x < p11.x) || (p10.x > current_x && current_x > p11.x)) && (y_abs < ylow.z) ? float3(1.0, x_rel, y_abs) : ylow;
-            yhigh = ((p10.x < current_x && current_x < p11.x) || (p10.x > current_x && current_x > p11.x)) && (y_abs > yhigh.z) ? float3(1.0, x_rel, y_abs) : yhigh;
+            float4 x_rel     = abs(X.xxyz - current.xxxx) / abs(X.xxyz - X.yzww);
+            float4 y_abs     = (1.0 - x_rel) * Y.xxyz + x_rel * Y.yzww;
+            uint4 in_between = (X.xxyz < current.xxxx && current.xxxx < X.yzww) || (X.xxyz > current.xxxx && current.xxxx > X.yzww);
+            float3 ylow      = 1000.0;
+            float3 yhigh     = -1000.0;
+            float4 pre_ylow  = y_abs * in_between + 1000 * (1 - in_between);
+            float4 pre_yhigh = y_abs * in_between - 1000 * (1 - in_between);
+            ylow.z           = min(min(pre_ylow.x, pre_ylow.y), min(pre_ylow.z, pre_ylow.w));
+            yhigh.z          = max(max(pre_yhigh.x, pre_yhigh.y), max(pre_yhigh.z, pre_yhigh.w));
+            float4 pre_x     = float4(0.0, x_rel.y, x_rel.z, 1.0);
+            float4 pre_y     = float4(x_rel.x, 0.0, 1.0, x_rel.w);
+            ylow.x           = dot((ylow.z == pre_ylow) * pre_x, 1.0);
+            ylow.y           = dot((ylow.z == pre_ylow) * pre_y, 1.0);
+            yhigh.x          = dot((yhigh.z == pre_yhigh) * pre_x, 1.0);
+            yhigh.y          = dot((yhigh.z == pre_yhigh) * pre_y, 1.0);
 
             // interpolate and check revert
-            rotated = revert ? float2(current_x_rel, abs(yhigh.z - current_y) / abs(ylow.z - yhigh.z)) : (1.0 - texcoord.y) * yhigh.xy + texcoord.y * ylow.xy; // find the y position on the original grid : find the y position on the rotated grid
+            rotated = revert ? float2(current_x_rel, abs(yhigh.z - current.y) / abs(ylow.z - yhigh.z)) : (1.0 - texcoord.y) * yhigh.xy + texcoord.y * ylow.xy; // find the y position on the original grid : find the y position on the rotated grid
         }
+
         return rotated;
-    }
-
-    // calculate if pixel is in focus
-    bool check_focus(float4 rgb, float scene_depth, float2 texcoord)
-    {
-        // colorfilter
-        float4 hsv          = rgb2hsv(rgb);
-        bool d1             = abs(hsv.b - UI_Value) < UI_ValueRange;
-        bool d2             = abs(hsv.r - UI_Hue) < (UI_HueRange + pow(2.71828, -(hsv.g * hsv.g) / 0.005)) || (1.0 - abs(hsv.r - UI_Hue)) < (UI_HueRange + pow(2.71828, -(hsv.g * hsv.g) / 0.01));
-        bool d3             = abs(hsv.g - UI_Saturation) <= UI_SaturationRange;
-        bool is_color_focus = (d3 && d2 && d1) || UI_FilterColor == 0;
-        // depthfilter
-        texcoord.x                   = (texcoord.x - UI_SphereFocusHorizontal) * ReShade::ScreenSize.x;
-        texcoord.y                   = (texcoord.y - UI_SphereFocusVertical) * ReShade::ScreenSize.y;
-        const float DEGREE_PER_PIXEL = float(UI_SphereFieldOfView) / ReShade::ScreenSize.x;
-        float fov_diff               = sqrt((texcoord.x * texcoord.x) + (texcoord.y * texcoord.y)) * DEGREE_PER_PIXEL;
-        float depth_diff             = UI_Spherical ? sqrt((scene_depth * scene_depth) + (UI_FocusDepth * UI_FocusDepth) - (2.0 * scene_depth * UI_FocusDepth * cos(fov_diff * (2.0 * M_PI / 360.0)))) : abs(scene_depth - UI_FocusDepth);
-        bool is_depth_focus          = (depth_diff < UI_FocusRangeDepth) || UI_FilterDepth == 0;
-
-        bool in_focus = is_color_focus && is_depth_focus;
-        return in_focus + UI_InvertMask - 2 * in_focus * UI_InvertMask; // @TODO Add invert mask as general option in header
     }
 
     /// Sorting
@@ -528,15 +303,15 @@ namespace COBRA_XCOL
     bool min_color(float4 a, float4 b)
     {
         float val = b.a - a.a; // val > 0 for a smaller
-        val       = (abs(val) < 0.1) ? ((a.r + a.g + a.b) - (b.r + b.g + b.b)) * (1 - UI_ReverseSort - UI_ReverseSort) : val;
-        return (val < 0.0) ? false : true; // Returns False if a smaller, yes its weird
+        val       = (abs(val) < 0.1) ? dot(a.rgb - b.rgb, 1) * (1 - 2 * UI_ReverseSort) : val;
+        return !(val < 0.0); // Returns False if a smaller, yes its weird
     }
 
     // single thread merge sort
     void merge_sort(int low, int high, int em)
     {
         float4 temp[COBRA_XCOL_HEIGHT / COBRA_XCOL_THREADS];
-        for (int i = 0; i < COBRA_XCOL_HEIGHT / COBRA_XCOL_THREADS; i++)
+        [unroll] for (int i = 0; i < COBRA_XCOL_HEIGHT / COBRA_XCOL_THREADS; i++)
         {
             temp[i] = color_table[low + i];
         }
@@ -586,17 +361,19 @@ namespace COBRA_XCOL
     void PS_MaskColor(float4 vpos : SV_Position, float2 texcoord : TEXCOORD, out float fragment : SV_Target)
     {
         // focus
-        float4 color      = tex2D(ReShade::BackBuffer, texcoord);
+        float3 color      = tex2D(ReShade::BackBuffer, texcoord).rgb;
         float scene_depth = ReShade::GetLinearizedDepth(texcoord);
-        float in_focus    = check_focus(color, scene_depth, texcoord);
+        bool in_focus     = check_focus(color, scene_depth, texcoord);
 
         // separator
         const uint HS_WIDTH = UI_HotsamplingMode ? 2036 : BUFFER_WIDTH;
         float2 t_noise      = float2(texcoord.x, texcoord.y) * UI_NoiseSize;
         const float PHI     = UI_RotationAngle * M_PI / 180;
-        t_noise             = float2(cos(PHI) * t_noise.x - sin(PHI) * t_noise.y, sin(PHI) * t_noise.x + cos(PHI) * t_noise.y);
-        t_noise             = float2(fmod(t_noise.x * HS_WIDTH, COBRA_XCOL_NOISE_WIDTH) / (float)COBRA_XCOL_NOISE_WIDTH, fmod(t_noise.y * COBRA_XCOL_HEIGHT, COBRA_XCOL_NOISE_HEIGHT) / (float)COBRA_XCOL_NOISE_HEIGHT);
-        float noise_1       = tex2D(SAM_Noise, t_noise).r; // add some point-color.
+        float2 PHISC;
+        sincos(PHI, PHISC.x, PHISC.y);
+        t_noise       = float2(PHISC.y * t_noise.x - PHISC.x * t_noise.y, PHISC.x * t_noise.x + PHISC.y * t_noise.y);
+        t_noise       = float2(fmod(t_noise.x * HS_WIDTH, COBRA_XCOL_NOISE_WIDTH) / (float)COBRA_XCOL_NOISE_WIDTH, fmod(t_noise.y * COBRA_XCOL_HEIGHT, COBRA_XCOL_NOISE_HEIGHT) / (float)COBRA_XCOL_NOISE_HEIGHT);
+        float noise_1 = tex2D(SAM_Noise, t_noise).r; // add some point-color.
         // bool is_noisy = UI_MaskingNoise > noise_1;
         bool seperator_1 = abs((color.r + color.g + color.b) / 3 - UI_BrightnessThresholdStart) < 0.04;
         bool seperator_2 = abs((color.r + color.g + color.b) / 3 - UI_BrightnessThresholdEnd) < 0.04;
@@ -631,7 +408,7 @@ namespace COBRA_XCOL
     void PS_PrepareColorSort(float4 vpos : SV_Position, float2 texcoord : TEXCOORD, out float4 fragment : SV_Target)
     {
         // prepare and rotate texture for sorting
-        float2 texcoord_new = rotate(texcoord, UI_RotationAngle, false);
+        float2 texcoord_new = rotate(texcoord, false);
         fragment            = tex2D(ReShade::BackBuffer, texcoord_new);
         float mask          = tex2D(SAM_Mask, texcoord_new).r;
         fragment.a          = mask;
@@ -646,9 +423,9 @@ namespace COBRA_XCOL
         uint i;
 
         // masking
-        for (i = row; i <= row - 1 + COBRA_XCOL_HEIGHT / COBRA_XCOL_THREADS; i++)
+        [unroll] for (i = 0; i <= 0 - 1 + COBRA_XCOL_HEIGHT / COBRA_XCOL_THREADS; i++)
         {
-            color_table[i + tid.x * COBRA_XCOL_HEIGHT] = tex2Dfetch(SAM_HalfRes, int2(id.x, i));
+            color_table[i + row + tid.x * COBRA_XCOL_HEIGHT] = tex2Dfetch(SAM_HalfRes, int2(id.x, i + row));
         }
 
         if (tid.y == 0)
@@ -680,6 +457,7 @@ namespace COBRA_XCOL
                 color_table[i + tid.x * COBRA_XCOL_HEIGHT].a = (float)mask_val + 0.5 * is_focus; // is the is_focus carryover depreciated? - Yes :)
             }
         }
+
         barrier();
         // sort the small arrays
         merge_sort(interval_start, interval_end, 1);
@@ -842,7 +620,7 @@ namespace COBRA_XCOL
         }
 
         barrier();
-        for (i = 0; i < COBRA_XCOL_HEIGHT / COBRA_XCOL_THREADS; i++)
+        [unroll] for (i = 0; i < COBRA_XCOL_HEIGHT / COBRA_XCOL_THREADS; i++)
         {
             color_table[row + i + tid.x * COBRA_XCOL_HEIGHT].a = color_table[row + i + tid.x * COBRA_XCOL_HEIGHT].a % 1.0;
             tex2Dstore(STOR_ColorSort, float2(id.x, row + i), color_table[row + i + tid.x * COBRA_XCOL_HEIGHT]);
@@ -852,10 +630,10 @@ namespace COBRA_XCOL
     // reproject to output window
     void PS_PrintColorSort(float4 vpos : SV_Position, float2 texcoord : TEXCOORD, out float4 fragment : SV_Target)
     {
-        float2 texcoord_new  = rotate(texcoord, UI_RotationAngle, true);
+        float2 texcoord_new  = rotate(texcoord, true);
         fragment             = tex2D(SAM_Background, texcoord);
         float fragment_depth = ReShade::GetLinearizedDepth(texcoord);
-        fragment             = check_focus(fragment, fragment_depth, texcoord) ? tex2D(SAM_ColorSort, texcoord_new) : fragment;
+        fragment             = check_focus(fragment.rgb, fragment_depth, texcoord) ? tex2D(SAM_ColorSort, texcoord_new) : fragment;
         fragment             = UI_ShowMask ? tex2D(SAM_Mask, texcoord).rrrr : fragment;
         fragment             = (UI_ShowSelectedHue * UI_FilterColor) ? show_hue(texcoord, fragment) : fragment;
     }
@@ -931,9 +709,10 @@ namespace COBRA_XCOL
             PixelShader  = PS_PrintColorSort;
         }
     }
-} // Namespace End
 
 #endif // Shader End
+
+} // Namespace End
 
 /*-------------.
 | :: Footer :: |

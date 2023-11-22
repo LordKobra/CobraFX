@@ -1,6 +1,6 @@
 ////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Realistic Long-Exposure (RealLongExposure.fx) by SirCobra
-// Version 0.5.2
+// Version 0.5.3
 // You can find info and all my shaders here: https://github.com/LordKobra/CobraFX
 //
 // --------Description---------
@@ -12,14 +12,6 @@
 // Thanks to Marty McFly, papadanku and Lord of Lunacy for many performance tips!
 ////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-////////////////////////////////////////////////////////////////////////////////////////////////////////
-//
-//                                            Defines & UI
-//
-////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-// Includes
-
 #include "Reshade.fxh"
 
 uniform float timer <
@@ -28,24 +20,33 @@ uniform float timer <
 
 // Shader Start
 
-// Defines
-#define COBRA_RLE_VERSION "0.5.2"
-#define COBRA_RLE_UI_GENERAL "\n / General Options /\n"
-#define COBRA_RLE_TIME_MAX 16777216 // 2^24 because of 23 bit fraction plus 'implicit leading bit'
-
-// Optional Compute Shader Support and R32I support from ReShade 5.9
-#if (((__RENDERER__ >= 0xb000 && __RENDERER__ < 0x10000) || (__RENDERER__ >= 0x14300)) && __RESHADE__ >= 50900)
-    #define COBRA_RLE_COMPUTE 1
-#else
-    #define COBRA_RLE_COMPUTE 0
-#endif
-
-#define COBRA_RLE_YSIZE 20
-
 // Namespace Everything!
 
 namespace COBRA_RLE
 {
+
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////
+    //
+    //                                            Defines & UI
+    //
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+    // Defines
+    #define COBRA_RLE_VERSION "0.5.3"
+
+    #define COBRA_UTL_MODE 0
+    #include ".\CobraUtility.fxh"
+
+    #define COBRA_RLE_TIME_MAX 16777216 // 2^24 because of 23 bit fraction plus 'implicit leading bit'
+
+    // Optional Compute Shader Support and R32I support from ReShade 5.9
+    #if (((__RENDERER__ >= 0xb000 && __RENDERER__ < 0x10000) || (__RENDERER__ >= 0x14300)) && __RESHADE__ >= 50900)
+        #define COBRA_RLE_COMPUTE 1
+    #else
+        #define COBRA_RLE_COMPUTE 0
+    #endif
+
+    #define COBRA_RLE_YSIZE 20
     // UI
 
     uniform float UI_ExposureDuration <
@@ -57,26 +58,26 @@ namespace COBRA_RLE
         ui_step      = 0.1;
         ui_units     = "s";
         ui_tooltip   = "Exposure duration in seconds.";
-        ui_category  = COBRA_RLE_UI_GENERAL;
+        ui_category  = COBRA_UTL_UI_GENERAL;
     >                = 1.0;
 
     uniform bool UI_StartExposure <
         ui_label     = " Start Exposure";
         ui_tooltip   = "Click to start the exposure process. It will run for the given amount of seconds and then freeze.\n"
                        "TIP: Bind this to a hotkey for convenient usage (right-click the button).";
-        ui_category  = COBRA_RLE_UI_GENERAL;
+        ui_category  = COBRA_UTL_UI_GENERAL;
     >                = false;
 
     uniform bool UI_ShowProgress <
         ui_label     = " Show Progress";
         ui_tooltip   = "Display a circular progress bar at the top during the exposure.";
-        ui_category  = COBRA_RLE_UI_GENERAL;
+        ui_category  = COBRA_UTL_UI_GENERAL;
     >                = false;
 
     uniform bool UI_ShowGreenOnFinish <
         ui_label     = " Show Green Dot On Finish";
         ui_tooltip   = "Display a green dot at the top to signalize the exposure has finished and entered preview mode.";
-        ui_category  = COBRA_RLE_UI_GENERAL;
+        ui_category  = COBRA_UTL_UI_GENERAL;
     >                = false;
 
     uniform float UI_ISO <
@@ -86,7 +87,7 @@ namespace COBRA_RLE
         ui_max       = 1600.0;
         ui_step      = 1.0;
         ui_tooltip   = "Sensitivity to light. 100 is normalized to the game. 1600 is 16 times the sensitivity.";
-        ui_category  = COBRA_RLE_UI_GENERAL;
+        ui_category  = COBRA_UTL_UI_GENERAL;
     >                = 100.0;
 
     uniform float UI_Gamma <
@@ -97,7 +98,7 @@ namespace COBRA_RLE
         ui_step      = 0.01;
         ui_tooltip   = "The gamma correction value. The default value is 1. The higher this value, the more persistent\n"
                        "highlights will be.";
-        ui_category  = COBRA_RLE_UI_GENERAL;
+        ui_category  = COBRA_UTL_UI_GENERAL;
     >                = 1.0;
 
     uniform uint UI_Delay <
@@ -108,7 +109,7 @@ namespace COBRA_RLE
         ui_step      = 1;
         ui_units     = "ms";
         ui_tooltip   = "The delay before exposure starts in milliseconds.";
-        ui_category  = COBRA_RLE_UI_GENERAL;
+        ui_category  = COBRA_UTL_UI_GENERAL;
     >                = 1;
 
     uniform int UI_BufferEnd <
@@ -216,10 +217,9 @@ namespace COBRA_RLE
     //                                           Helper Functions
     //
     ////////////////////////////////////////////////////////////////////////////////////////////////////////
-    
-    #define COBRA_UTL_COLOR 0
+
+    #define COBRA_UTL_MODE 2
     #include ".\CobraUtility.fxh"
-    #undef COBRA_UTL_COLOR
 
     // return the exposure weight of a single frame
     float4 get_exposure(float4 value)

@@ -1,4 +1,8 @@
 CobraMask.fx
+        0.2.4   2023-11-22
+                - now depends on CobraUtility.fxh v0.2.0
+                - masking improved
+
         0.2.3   2023-11-17
                 - now depends on CobraUtility.fxh v0.1.1
                 - slight performance improvements
@@ -12,11 +16,21 @@ CobraMask.fx
                 - hsv2rgb function changed
 
 CobraUtility.fxh
+        0.2.0   2023-11-22
+                - UI elements added
+                - define structure reworked
+                - focus function added
+
         0.1.1   2023-11-20
                 - added to the repository
                 - has a basic function compendium
 
 ColorSort_CS.fx
+        0.5.2   2023-11-22
+                - now depends on CobraUtility.fxh v0.2.0
+                - rotation improved
+                - masking improved
+
         0.5.1   2023-11-08
                 - huge code reformatting (can break presets)
                 - improved tooltips
@@ -24,7 +38,10 @@ ColorSort_CS.fx
                 - renamed texture "colorsort_noise.png" to "uniform_noise.png"
                 - fixed bug causing effect to crash if "NoDebugInfo=1" was set in the ReShade.ini
 
-Droste.fx
+Droste.fx        
+        0.4.3   2023-11-22
+                - now depends on CobraUtility.fxh v0.2.0
+
         0.4.2   2023-11-17
                 - now depends on CobraUtility.fxh
                 - minor performance improvements
@@ -45,6 +62,10 @@ Gravity.fx
                 - improved tooltips
 
 Gravity_CS.fx
+        0.3.1   2023-11-22
+                - now depends on CobraUtility.fxh v0.2.0
+                - masking improved
+
         0.3.0   2023-11-20
                 - now depends on CobraUtility.fxh v0.1.1
                 - added adjustable noise size
@@ -63,6 +84,9 @@ Gravity_CS.fx
                 - fixed bug causing effect to disappear when tint-intensity was set to 0
 
 RealLongExposure.fx
+        0.5.3   2023-11-22
+                - now depends on CobraUtility.fxh v0.2.0
+
         0.5.2   2023-11-20
                 - custom resolution compability
 
