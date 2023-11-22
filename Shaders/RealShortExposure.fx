@@ -1,10 +1,12 @@
 ////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Real Short Exposure  AKA Motion Blur (RealShortExposure.fx) by SirCobra
-// Version 0.1
+// Version 0.2
 // You can find info and all my shaders here: https://github.com/LordKobra/CobraFX
 // --------Description---------
 // This shader blends the last few frames together, to create a continuos version of the
 // RealLongExposure.fx effect. This can also be considered as motion blur.
+// ----------Credits-----------
+// Thanks to Lord of Lunacy and Marty McFly for various tips!
 ////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -23,7 +25,7 @@ uniform uint framecount < source = "framecount";
 namespace ShortExposure
 {
 
-#define COBRA_RSE_VERSION "0.1.0"
+#define COBRA_RSE_VERSION "0.2.0"
 
 // We need Compute Shader Support
 #if (((__RENDERER__ >= 0xb000 && __RENDERER__ < 0x10000) || (__RENDERER__ >= 0x14300)) && __RESHADE__ >= 40800)
@@ -33,7 +35,7 @@ namespace ShortExposure
 #warning "RealShortExposure.fx does only work with ReShade 4.8 or newer, DirectX 11 or newer, OpenGL 4.3 or newer and Vulkan."
 #endif
 
-#define COBRA_RSE_YSIZE 8
+#define COBRA_RSE_YSIZE 20
 
     // UI
 
@@ -46,6 +48,16 @@ namespace ShortExposure
         ui_step      = 1;
         ui_tooltip   = "The amount of frames to blend in the buffer.";
     >            = 1;
+
+    uniform float UI_Gamma <
+        ui_label     = " Gamma";
+        ui_type      = "slider";
+        ui_min       = 0.4;
+        ui_max       = 4.4;
+        ui_step      = 0.01;
+        ui_tooltip   = "The gamma correction value. The default value is 1. The higher this value, the more persistent\n"
+                       "highlights will be.";
+    >                = 1.0;
 
     uniform int UI_BufferEnd <
         ui_type = "radio";
@@ -105,6 +117,10 @@ namespace ShortExposure
 #define COBRA_UTL_COLOR 0
 #include ".\CobraUtility.fxh"
 #undef COBRA_UTL_COLOR
+    float4 get_exposure(float4 value)
+    {
+        return pow(abs(value.rgba), UI_Gamma);
+    }
 
     void encode_position(inout float4 source, inout float4 source2, float3 value, uint index)
     {
@@ -112,7 +128,7 @@ namespace ShortExposure
         uint4 idr     = uint4(3, 2, 1, 0) > UI_Frames - 1;
         uint4 idv2    = uint4(7, 6, 5, 4) == index;
         uint4 idr2    = uint4(7, 6, 5, 4) > UI_Frames - 1;
-        uint3 ival    = value * 255.99;
+        uint3 ival    = value * 255.9999847412109375;
         float encoded = ival.x << 16u | ival.y << 8u | ival.z;
         source        = idv * encoded + (1 - idv - idr) * source;
         source2       = idv2 * encoded + (1 - idv2 - idr2) * source2;
@@ -121,10 +137,14 @@ namespace ShortExposure
     float3 decode_values(float4 source)
     {
         uint4 usource = uint4(source);
-        float3 result = float3(dot((usource >> 16u), 1),
-                               dot((usource >> 8u) % 256, 1),
-                               dot(usource % 256, 1));
-        return result / 255.99;
+        float4 r = (usource >> 16u) / 255.9999847412109375;
+        float4 g = ((usource >> 8u) % 256) / 255.9999847412109375;
+        float4 b = (usource % 256) / 255.9999847412109375;
+        float3 result;
+        result.r = dot(get_exposure(r),1.0);
+        result.g = dot(get_exposure(g),1.0);
+        result.b = dot(get_exposure(b),1.0);
+        return result;
     }
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -135,6 +155,9 @@ namespace ShortExposure
 
     void CS_ShortExposure(uint3 id : SV_DispatchThreadID, uint3 tid : SV_GroupThreadID, uint gi : SV_GroupIndex)
     {
+        [branch]
+        if(any(id.xy >= BUFFER_SCREEN_SIZE))
+            return;
 
         uint index = framecount % UI_Frames;
         uint2 vpos = uint2(id.x, id.y);
@@ -160,6 +183,7 @@ namespace ShortExposure
         float4 source  = tex2Dfetch(SAM_Exposure, int2(floor(o.vpos.xy)));
         float4 source2 = tex2Dfetch(SAM_Exposure2, int2(floor(o.vpos.xy)));
         fragment.rgb   = (decode_values(source) + decode_values(source2)) / UI_Frames;
+        fragment.rgb   = pow(abs(fragment.rgb), 1 / UI_Gamma);
         fragment.a     = 1.0;
     }
 
@@ -180,8 +204,8 @@ namespace ShortExposure
     {
         pass ShortExposure
         {
-            ComputeShader = CS_ShortExposure<1, BUFFER_HEIGHT / COBRA_RSE_YSIZE>;
-            DispatchSizeX = BUFFER_WIDTH;
+            ComputeShader = CS_ShortExposure<8, ROUNDUP(BUFFER_HEIGHT, COBRA_RSE_YSIZE)>;
+            DispatchSizeX = ROUNDUP(BUFFER_WIDTH, 8);
             DispatchSizeY = COBRA_RSE_YSIZE;
         }
 		
