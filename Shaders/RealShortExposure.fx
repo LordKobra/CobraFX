@@ -1,6 +1,6 @@
 ////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Real Short Exposure  AKA Motion Blur (RealShortExposure.fx) by SirCobra
-// Version 0.2
+// Version 0.2.1
 // You can find info and all my shaders here: https://github.com/LordKobra/CobraFX
 // --------Description---------
 // This shader blends the last few frames together, to create a continuos version of the
@@ -9,45 +9,50 @@
 // Thanks to Lord of Lunacy and Marty McFly for various tips!
 ////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-////////////////////////////////////////////////////////////////////////////////////////////////////////
-//
-//                                            Defines & UI
-//
-////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-// Shader Start
-
 #include "Reshade.fxh"
 uniform uint framecount < source = "framecount";
 > ;
 
+// Shader Start
+
 // Namespace Everything
+
 namespace ShortExposure
 {
 
-#define COBRA_RSE_VERSION "0.2.0"
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////
+    //
+    //                                            Defines & UI
+    //
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-// We need Compute Shader Support
-#if (((__RENDERER__ >= 0xb000 && __RENDERER__ < 0x10000) || (__RENDERER__ >= 0x14300)) && __RESHADE__ >= 40800)
-#define COBRA_RSE_COMPUTE 1
-#else
-#define COBRA_RSE_COMPUTE 0
-#warning "RealShortExposure.fx does only work with ReShade 4.8 or newer, DirectX 11 or newer, OpenGL 4.3 or newer and Vulkan."
-#endif
+    // Defines
 
-#define COBRA_RSE_YSIZE 20
+    #define COBRA_RSE_VERSION "0.1.1"
+    #define COBRA_UTL_MODE 0
+    #include ".\CobraUtility.fxh"
+
+    // We need Compute Shader Support
+    #if (((__RENDERER__ >= 0xb000 && __RENDERER__ < 0x10000) || (__RENDERER__ >= 0x14300)) && __RESHADE__ >= 40800)
+        #define COBRA_RSE_COMPUTE 1
+    #else
+        #define COBRA_RSE_COMPUTE 0
+        #warning "RealShortExposure.fx does only work with ReShade 4.8 or newer, DirectX 11 or newer, OpenGL 4.3 or newer and Vulkan."
+    #endif
+
+    #define COBRA_RSE_YSIZE 20
 
     // UI
 
     uniform uint UI_Frames <
-        ui_label = " Frames";
+        ui_label     = " Frames";
         ui_type      = "slider";
         ui_spacing   = 2;
         ui_min       = 1;
         ui_max       = 8;
         ui_step      = 1;
         ui_tooltip   = "The amount of frames to blend in the buffer.";
-    >            = 1;
+    >                = 4;
 
     uniform float UI_Gamma <
         ui_label     = " Gamma";
@@ -60,7 +65,7 @@ namespace ShortExposure
     >                = 1.0;
 
     uniform int UI_BufferEnd <
-        ui_type = "radio";
+        ui_type      = "radio";
         ui_spacing  = 2;
         ui_text     = " Shader Version: " COBRA_RSE_VERSION;
         ui_label    = " ";
@@ -114,9 +119,9 @@ namespace ShortExposure
     //
     ////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-#define COBRA_UTL_COLOR 0
-#include ".\CobraUtility.fxh"
-#undef COBRA_UTL_COLOR
+    #define COBRA_UTL_MODE 2
+    #include ".\CobraUtility.fxh"
+
     float4 get_exposure(float4 value)
     {
         return pow(abs(value.rgba), UI_Gamma);
@@ -137,13 +142,13 @@ namespace ShortExposure
     float3 decode_values(float4 source)
     {
         uint4 usource = uint4(source);
-        float4 r = (usource >> 16u) / 255.9999847412109375;
-        float4 g = ((usource >> 8u) % 256) / 255.9999847412109375;
-        float4 b = (usource % 256) / 255.9999847412109375;
+        float4 r      = (usource >> 16u) / 255.9999847412109375;
+        float4 g      = ((usource >> 8u) % 256) / 255.9999847412109375;
+        float4 b      = (usource % 256) / 255.9999847412109375;
         float3 result;
-        result.r = dot(get_exposure(r),1.0);
-        result.g = dot(get_exposure(g),1.0);
-        result.b = dot(get_exposure(b),1.0);
+        result.r = dot(get_exposure(r), 1.0);
+        result.g = dot(get_exposure(g), 1.0);
+        result.b = dot(get_exposure(b), 1.0);
         return result;
     }
 
@@ -155,9 +160,7 @@ namespace ShortExposure
 
     void CS_ShortExposure(uint3 id : SV_DispatchThreadID, uint3 tid : SV_GroupThreadID, uint gi : SV_GroupIndex)
     {
-        [branch]
-        if(any(id.xy >= BUFFER_SCREEN_SIZE))
-            return;
+        [branch] if (any(id.xy >= BUFFER_SCREEN_SIZE)) return;
 
         uint index = framecount % UI_Frames;
         uint2 vpos = uint2(id.x, id.y);
@@ -194,12 +197,12 @@ namespace ShortExposure
     ////////////////////////////////////////////////////////////////////////////////////////////////////////
 
     technique TECH_RealShortExposure <
-        ui_label 	 = "Real Short Exposure";
+        ui_label     = "Real Short Exposure";
         ui_tooltip   = "------About-------\n"
-					   "RealShortExposure.fx blends the last few frames together, to create a continuos version of the\n"
-					   "RealLongExposure.fx effect. This can also be considered as motion blur.\n\n"
-					   "Version:    " COBRA_RSE_VERSION "\nAuthor:     SirCobra\nCollection: CobraFX\n"
-					   "            https://github.com/LordKobra/CobraFX";
+                       "RealShortExposure.fx blends the last few frames together, to create a continuos version of the\n"
+                       "RealLongExposure.fx effect. This can also be considered as motion blur.\n\n"
+                       "Version:    " COBRA_RSE_VERSION "\nAuthor:     SirCobra\nCollection: CobraFX\n"
+                       "            https://github.com/LordKobra/CobraFX";
     >
     {
         pass ShortExposure
@@ -208,7 +211,7 @@ namespace ShortExposure
             DispatchSizeX = ROUNDUP(BUFFER_WIDTH, 8);
             DispatchSizeY = COBRA_RSE_YSIZE;
         }
-		
+
         pass DisplayExposure
         {
             VertexShader = VS_DisplayExposure;
