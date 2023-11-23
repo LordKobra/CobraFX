@@ -1,4 +1,7 @@
 CobraMask.fx
+        0.3.0   2023-11-23
+                - added opacity slider
+
         0.2.4   2023-11-22
                 - now depends on CobraUtility.fxh v0.2.0
                 - masking improved

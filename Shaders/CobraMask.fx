@@ -1,6 +1,6 @@
 ////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Cobra Mask (CobraMask.fx) by SirCobra
-// Version 0.2.4
+// Version 0.3.0
 // You can find info and all my shaders here: https://github.com/LordKobra/CobraFX
 //
 // --------Description---------
@@ -34,12 +34,23 @@ namespace COBRA_MSK
     ////////////////////////////////////////////////////////////////////////////////////////////////////////
 
     // Defines
-    #define COBRA_MSK_VERSION "0.2.4"
+    #define COBRA_MSK_VERSION "0.3.0"
 
     #define COBRA_UTL_MODE 0
     #include ".\CobraUtility.fxh"
 
     // UI
+
+    uniform float UI_Opacity <
+        ui_label     = " Effect Opacity";
+        ui_type      = "slider";
+        ui_spacing   = 2;
+        ui_min       = 0.000;
+        ui_max       = 1.000;
+        ui_tooltip   = "The general opacity.";
+        ui_step      = 0.001;
+        ui_category  = COBRA_UTL_UI_GENERAL;
+    >                = 1.000;
 
     #define COBRA_UTL_MODE 1
     #include ".\CobraUtility.fxh"
@@ -103,7 +114,7 @@ namespace COBRA_MSK
     void PS_MaskEnd(float4 vpos : SV_Position, float2 texcoord : TEXCOORD, out float4 fragment : SV_Target)
     {
         fragment = tex2Dfetch(SAM_Mask, floor(vpos.xy));
-        fragment = UI_ShowMask ? 1 - fragment.aaaa : lerp(tex2Dfetch(ReShade::BackBuffer, floor(vpos.xy)), fragment, 1.0 - fragment.a);
+        fragment = UI_ShowMask ? 1 - fragment.aaaa : lerp(tex2Dfetch(ReShade::BackBuffer, floor(vpos.xy)), fragment, (1.0 - fragment.a * UI_Opacity));
         fragment = (UI_ShowSelectedHue * UI_FilterColor) ? show_hue(texcoord, fragment) : fragment;
     }
 
