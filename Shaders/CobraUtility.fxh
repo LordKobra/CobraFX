@@ -134,11 +134,11 @@
         ui_label     = " Hue Range";
         ui_type      = "slider";
         ui_min       = 0.000;
-        ui_max       = 0.500;
+        ui_max       = 0.501;
         ui_step      = 0.001;
         ui_tooltip   = "The tolerance around the hue.";
         ui_category  = COBRA_UTL_UI_COLOR;
-    >                = 0.500;
+    >                = 0.501;
 
     uniform float UI_Saturation <
         ui_label     = " Saturation";
@@ -312,21 +312,20 @@
             float3 hsv           = rgb2hsv(rgb);
             float d1_f           = abs(hsv.b - UI_Value) - UI_ValueRange;
             d1_f                 = 1.0 - smoothstep(0.0, UI_ValueEdge, d1_f);
-            bool d2              = abs(hsv.r - UI_Hue) < (UI_HueRange + pow(2.71828, -(hsv.g * hsv.g) / 0.005)) || (1.0 - abs(hsv.r - UI_Hue)) < (UI_HueRange + pow(2.71828, -(hsv.g * hsv.g) / 0.01));
+            bool d2              = abs(hsv.r - UI_Hue) < (UI_HueRange + exp(-(hsv.g * hsv.g) * 200)) || (1.0 - abs(hsv.r - UI_Hue)) < (UI_HueRange + exp(-(hsv.g * hsv.g) * 100));
             bool d3              = abs(hsv.g - UI_Saturation) <= UI_SaturationRange;
             float is_color_focus = max(d3 * d2 * d1_f, UI_FilterColor == 0); // color threshold
 
             // depthfilter
             const float DESATURATE_FULL_RANGE = UI_FocusRangeDepth + UI_FocusEdgeDepth;
-            texcoord.x                        = (texcoord.x - UI_SphereFocusHorizontal) * ReShade::ScreenSize.x;
-            texcoord.y                        = (texcoord.y - UI_SphereFocusVertical) * ReShade::ScreenSize.y;
             const float DEGREE_PER_PIXEL      = float(UI_SphereFieldOfView) / ReShade::ScreenSize.x;
-            float fov_diff                    = sqrt((texcoord.x * texcoord.x) + (texcoord.y * texcoord.y)) * DEGREE_PER_PIXEL;
+            texcoord                          = (texcoord - float2(UI_SphereFocusHorizontal, UI_SphereFocusVertical)) * ReShade::ScreenSize.xy;
+            float fov_diff                    = length(texcoord) * DEGREE_PER_PIXEL;
             float depth_diff                  = UI_Spherical ? sqrt((scene_depth * scene_depth) + (UI_FocusDepth * UI_FocusDepth) - (2.0 * scene_depth * UI_FocusDepth * cos(fov_diff * (2.0 * M_PI / 360.0)))) : abs(scene_depth - UI_FocusDepth);
             float depth_val                   = 1.0 - saturate((depth_diff > DESATURATE_FULL_RANGE) ? 1.0 : smoothstep(UI_FocusRangeDepth, DESATURATE_FULL_RANGE, depth_diff));
             depth_val                         = max(depth_val, UI_FilterDepth == 0);
             float in_focus                    = is_color_focus * depth_val;
-            return lerp(in_focus, 1 - in_focus, UI_InvertMask); // @TODO Add invert mask as general option in header
+            return lerp(in_focus, 1 - in_focus, UI_InvertMask);
         }
 
     #endif

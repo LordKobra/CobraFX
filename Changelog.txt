@@ -65,6 +65,10 @@ Gravity.fx
                 - improved tooltips
 
 Gravity_CS.fx
+        0.3.2   2023-11-25
+                - situational performance improvements (up to 2x speed)
+                - requirements updated
+
         0.3.1   2023-11-22
                 - now depends on CobraUtility.fxh v0.2.0
                 - masking improved

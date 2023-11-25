@@ -1,6 +1,6 @@
 ////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Gravity CS (Gravity_CS.fx) by SirCobra
-// Version 0.3.1
+// Version 0.3.2
 // You can find info and all my shaders here: https://github.com/LordKobra/CobraFX
 //
 // --------Description---------
@@ -38,7 +38,7 @@ namespace COBRA_XGRV
 
     // Defines
 
-    #define COBRA_XGRV_VERSION "0.3.1"
+    #define COBRA_XGRV_VERSION "0.3.2"
     #define COBRA_UTL_MODE 0
     #include ".\CobraUtility.fxh"
 
@@ -57,11 +57,11 @@ namespace COBRA_XGRV
     #define COBRA_XGRV_MEMORY_HEIGHT (COBRA_XGRV_THREADS * COBRA_XGRV_WORKLOAD)
 
     // We need Compute Shader Support
-    #if (((__RENDERER__ >= 0xb000 && __RENDERER__ < 0x10000) || (__RENDERER__ >= 0x14300)) && __RESHADE__ >= 40800)
+    #if (((__RENDERER__ >= 0xb000 && __RENDERER__ < 0x10000) || (__RENDERER__ >= 0x14300)) && __RESHADE__ >= 50900)
         #define COBRA_XGRV_COMPUTE 1
     #else
         #define COBRA_XGRV_COMPUTE 0
-        #warning "Gravity_CS.fx does only work with ReShade 4.8 or newer, DirectX 11 or newer, OpenGL 4.3 or newer and Vulkan."
+        #warning "Gravity_CS.fx does only work with ReShade 5.9 or newer, DirectX 11 or newer, OpenGL 4.3 or newer and Vulkan."
     #endif
 
     #if COBRA_XGRV_COMPUTE != 0
@@ -279,6 +279,7 @@ namespace COBRA_XGRV
     groupshared float depth_list[COBRA_XGRV_MEMORY_HEIGHT];
     groupshared float depth_listU[COBRA_XGRV_MEMORY_HEIGHT];
     groupshared uint strengthen[COBRA_XGRV_MEMORY_HEIGHT];
+    groupshared uint max_str;
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////
     //
@@ -322,7 +323,11 @@ namespace COBRA_XGRV
 
     void CS_Gravity(uint3 id : SV_DispatchThreadID, uint3 tid : SV_GroupThreadID, uint gi : SV_GroupIndex)
     {
-        uint max_strength = UI_GravityIntensity * (COBRA_XGRV_HEIGHT - 2.0);
+        uint max_strength = 0;
+        if(tid.y == 0) 
+            max_str = 0;
+
+        barrier();
         uint start        = tid.y * COBRA_XGRV_WORKLOAD;
         uint finish       = -1 + COBRA_XGRV_WORKLOAD;
         float x_norm      = (round(id.x * COBRA_XGRV_RES_X) + 0.5) / BUFFER_WIDTH;
@@ -343,9 +348,12 @@ namespace COBRA_XGRV
             float strength                 = tex2Dfetch(SAM_GravitySeedMap, int2(id.x, yi)).r;
             strength     *= check_focus(rgb, depth_list[y], float2(x_norm, (round(y * COBRA_XGRV_RES_Y) + 0.5) / BUFFER_HEIGHT));
             strengthen[y] = strength * UI_GravityIntensity * (COBRA_XGRV_HEIGHT - 2.0);
+            max_strength = max(max_strength, strengthen[y]);
         }
-
+        atomicMax(max_str, max_strength);
         barrier();
+
+        max_strength = max_str;
 
         uint paint_iterator = 0;
 
