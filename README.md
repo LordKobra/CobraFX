@@ -55,6 +55,13 @@ Tip: Right-click the `Start Exposure` button to bind this functionality to a hot
 <p align="center"><img src="https://steamuserimages-a.akamaihd.net/ugc/2211891143717972112/F25CFC9B4359AA8D5B22B7C28600535DEFAEB060/?imw=5000&imh=5000&ima=fit&impolicy=Letterbox&imcolor=%23000000&letterbox=false">
 <i>Droste Effect in action</i></p>
 
+## Frequency
+
+**Frequency_CS.fx** creates an effect also known as `Frequency Modulation`, which scans the image from left to right and releases a wave whenever a luminance-based threshold is reached. The pixel luminance is summed up and modulated depending on a given period. Additional parameters give the effect a unique look. A masking stage enables filtering affected colors and depth.
+
+<p align="center"><img src="https://github.com/LordKobra/CobraFX/assets/39347022/db1b5fcc-24c9-4bda-b2ba-4b36b36e29a1">
+<i>Frequency in action</i></p>
+
 ## Cobra Mask
 
 **CobraMask.fx** allows to apply ReShade shaders exclusively to a selected part of the screen. The mask can be defined through color and scene-depth parameters. The parameters are specifically designed to work in accordance with the color and depth selection of other CobraFX shaders. 

@@ -56,6 +56,10 @@ Droste.fx
                         - better off-center effect
                         - automatic aspect-ratio adjustment
 
+Frequency_CS.fx
+        0.1.0   2023-11-28
+                - added to the repository
+
 Gravity.fx
         0.2.2   2023-11-20
                 - changed noise texture name

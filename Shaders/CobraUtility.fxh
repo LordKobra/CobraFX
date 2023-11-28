@@ -305,7 +305,8 @@
             return fragment;
         }
 
-        // CobraMask Gravity_CS ColorSort_CS
+        // The effect can be applied to a specific area like a DoF shader. The basic methods for this were taken with permission
+        // from https://github.com/FransBouma/OtisFX/blob/master/Shaders/Emphasize.fx
         float check_focus(float3 rgb, float scene_depth, float2 texcoord)
         {
             // colorfilter
