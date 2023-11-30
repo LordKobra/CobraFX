@@ -57,6 +57,10 @@ Droste.fx
                         - automatic aspect-ratio adjustment
 
 Frequency_CS.fx
+        0.1.1   2023-11-29
+                - performance improvements
+                - improved decay option
+
         0.1.0   2023-11-28
                 - added to the repository
 

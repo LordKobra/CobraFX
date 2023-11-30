@@ -1,6 +1,6 @@
 ////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Frequency (Frquency_CS.fx) by SirCobra
-// Version 0.1.0
+// Version 0.1.1
 // You can find info and all my shaders here: https://github.com/LordKobra/CobraFX
 //
 // --------Description---------
@@ -9,7 +9,7 @@
 // based threshold is reached. The pixel luminance is summed up and modulated
 // depending on a given period. Additional parameters give the effect a unique
 // look. A masking stage enables filtering affected colors and depth.
-// 
+//
 // ----------Credits-----------
 // Thanks to...
 // ... TeoTave for introducing me to this effect!
@@ -38,11 +38,12 @@ namespace COBRA_XFRQ
 
     // Defines
 
-    #define COBRA_XFRQ_VERSION "0.1.0"
+    #define COBRA_XFRQ_VERSION "0.1.1"
     #define COBRA_UTL_MODE 0
     #include ".\CobraUtility.fxh"
 
-    #define COBRA_XFRQ_THREADS 64
+    #define COBRA_XFRQ_THREADS 16
+    #define COBRA_XFRQ_THREAD_WIDTH 16
     #define COBRA_XFRQ_DISPATCHES ROUNDUP(BUFFER_HEIGHT, COBRA_XFRQ_THREADS)
 
     // We need Compute Shader Support
@@ -69,7 +70,7 @@ namespace COBRA_XFRQ
         ui_tooltip   = "Determines the frequency of the wave appearance. Low values let the wave appear in\n"
                        "short intervals.";
         ui_category  = COBRA_UTL_UI_GENERAL;
-    >            = 10;
+    >                = 20;
 
     uniform float UI_Thickness <
         ui_label     = " Thickness";
@@ -80,7 +81,7 @@ namespace COBRA_XFRQ
         ui_units     = "px";
         ui_tooltip   = "The thickness of the wave in pixel.";
         ui_category  = COBRA_UTL_UI_GENERAL;
-    >                = 2;
+    >                = 4;
 
     uniform float UI_Gamma <
         ui_label     = " Gamma";
@@ -117,20 +118,20 @@ namespace COBRA_XFRQ
         ui_max       = 1.000;
         ui_step      = 0.001;
         ui_tooltip   = "Decay of the wave frequency after each wave. Highly instable, but can produce\n"
-                       "interesting results. Not recommended above with animated waves.";
+                       "interesting results. Not recommended above 0 with animated waves.";
         ui_category  = COBRA_UTL_UI_GENERAL;
-    >            = 0.000;
+    >                = 0.000;
 
     uniform float UI_Offset <
         ui_label     = " Offset";
         ui_type      = "slider";
-        ui_min       = 0.00;
+        ui_min       = 0.0;
         ui_max       = 100.0;
         ui_step      = 0.1;
         ui_units     = "%%";
         ui_tooltip   = "Initial offset of the first wave.";
         ui_category  = COBRA_UTL_UI_GENERAL;
-    >                = 0.00;
+    >                = 0.1;
 
     uniform int UI_BlendMode <
         ui_label     = " Blend Mode";
@@ -202,16 +203,6 @@ namespace COBRA_XFRQ
         ui_category  = COBRA_UTL_UI_GENERAL;
     >                = 1.0;
 
-    uniform float UI_Sensitivity <
-        ui_label     = " Sensitivity";
-        ui_type      = "slider";
-        ui_min       = 0.001;
-        ui_max       = 1.000;
-        ui_step      = 0.001;
-        ui_tooltip   = " Keep this value at 0.5, unless you got flickering.";
-        ui_category  = COBRA_UTL_UI_GENERAL;
-    >                = 0.500;
-
     uniform bool UI_HotsamplingMode <
         ui_label     = " Hotsampling Mode";
         ui_tooltip   = "Activate this, then adjust your options and the effect will stay similar at\n"
@@ -262,7 +253,8 @@ namespace COBRA_XFRQ
     storage STOR_Mask { Texture = TEX_Mask; };
 
     // Groupshared Memory
-
+    groupshared float summary[COBRA_XFRQ_THREADS * COBRA_XFRQ_THREAD_WIDTH];
+    groupshared uint overlap[COBRA_XFRQ_THREADS * COBRA_XFRQ_THREAD_WIDTH];
     ////////////////////////////////////////////////////////////////////////////////////////////////////////
     //
     //                                           Helper Functions
@@ -334,33 +326,127 @@ namespace COBRA_XFRQ
 
     void CS_Frequency(uint3 id : SV_DispatchThreadID, uint3 tid : SV_GroupThreadID)
     {
-        if (id.y >= BUFFER_HEIGHT)
-            return;
-
-        float accum      = UI_Offset / 100.0 * UI_Frequency - (UI_Animate * timer / 1000.0);
-        float decay      = 1.0;
-        uint remaining   = 0;
-        bool was_blended = false;
-        for (uint i = 0; i < BUFFER_WIDTH; i++)
+        uint start       = id.x * ROUNDUP(BUFFER_WIDTH, COBRA_XFRQ_THREAD_WIDTH);
+        uint end         = min(start + ROUNDUP(BUFFER_WIDTH, COBRA_XFRQ_THREAD_WIDTH) - 1, BUFFER_WIDTH - 1);
+        uint global_zero = tid.y * COBRA_XFRQ_THREAD_WIDTH;
+        float accum_s    = UI_Offset / 100.0 * UI_Frequency - fmod(UI_Animate * timer / 200.0, UI_Frequency);
+        accum_s          = (id.x == 0) ? accum_s : 0.0;
+        float accum      = accum_s;
+        float section[ROUNDUP(BUFFER_WIDTH, COBRA_XFRQ_THREAD_WIDTH)];
+        // parallel prefix sum version
+        // 1) add local array, write sum to global thread array -> global write
+        if (id.y < BUFFER_HEIGHT)
         {
-            float val = tex2Dfetch(SAM_Mask, int2(i, id.y)).r;
-            accum += val;
-
-            if (fmod(accum, UI_Frequency * decay) > UI_Sensitivity * UI_Frequency)
+            for (uint i = start; i <= end; i++)
             {
-                was_blended = true;
+                section[i - start] = tex2Dfetch(SAM_Mask, int2(i, id.y)).r;
+                accum += section[i - start];
             }
-            else if (was_blended)
+            summary[global_zero + id.x] = accum;
+        }
+
+        // 1.5) clear global array, due to two arrays we dont need another sync
+        overlap[global_zero + id.x] = 0;
+
+        barrier();
+        // 2) sync arrays and add sum -> global read
+        float accum_l = accum_s;
+        if (id.y < BUFFER_HEIGHT)
+        {
+            for (uint i = 0; i < id.x; i++)
             {
-                remaining = UI_HotsamplingMode ? UI_Thickness * float(BUFFER_WIDTH) / 1920.0 : UI_Thickness;
-                decay *= 1.0 + UI_Decay;
-                was_blended = false;
+                accum_l += summary[global_zero + i];
+            }
+        }
+
+        // 3) calculate modulos: if decay==0 by modulo in local array, if decay > 0 by subtracting iterations from total value until in cell.
+        //    Also shade areas and write overlap to thread array (forward or backward reading? probably forward with atomicAdd) -> forward add
+        float decay         = 1.0;
+        uint remaining      = 0;
+        uint first_position = end;
+        const uint R        = UI_HotsamplingMode ? UI_Thickness * float(BUFFER_WIDTH) / 1920.0 : UI_Thickness;
+        const float U       = 1.0 + UI_Decay;
+        if (id.y < BUFFER_HEIGHT)
+        {
+            /*  the math idea for future corrections
+                accum - ((f) + (f * u) + (f * u * u) + ...) < 0
+                accum < (f) + (f * u) + (f * u * u) + ...
+                accum < f *((1) + (1 * u) + (1 * u * u) + ...);
+                accum < s(n) with a = UI_Frequency, r = u;
+                accum < a (1- u^n) / (1-u) // (1-u) negative cause u>1
+                accum/a*(1-u) > (1-u^n) // * -1
+                -accum/a*(1-u) < u^n - 1
+                1 -accum/a*(1-u) < u^n
+                log(1 -accum/a*(1-u)) < n * log(u) // logu > 0
+                log(1 -accum/a*(1-u))/ log(u) < n
+                n = ceil(log(1 -accum/a*(1-u))/ log(u))
+                accum -= s(n)
+                accum -= a * (1- u^n) / (1-u)
+
+                ==1 case:
+                accum < an
+                accumfd < n
+                n = ceil(accumfd)
+                accum - UI_Frequency*n
+            */
+            //float accumfd = uint(accum_l) / UI_Frequency; // @TODO for some reason i need uint conversion and additional while pass
+            /* if (!(U > 1.0)) // always produces rounding issues past initial thread.
+            {
+                uint n = ROUNDUP(uint(accum_l), UI_Frequency);
+                accum_l -= UI_Frequency * n;
+            } */
+            /* else
+            {  // currently doesn't work properly although math should be correct
+                uint n = ceil(log(1-accumfd*(1-u)) * rcp(log(u)));
+                decay = (1-pow(u,n))/(1-u);
+                accum_l -= UI_Frequency * decay;
+            } */
+
+            while (accum_l > 0.0)
+            {
+                accum_l -= UI_Frequency * decay;
+                decay *= U;
             }
 
-            if (remaining > 0)
+            for (uint i = start; i <= end; i++)
             {
-                remaining--;
-                tex2Dstore(STOR_Frequency, int2(i, id.y), 1.0);
+                accum_l += section[i - start];
+                if (accum_l > 0.0)
+                {
+                    remaining      = R;
+                    first_position = min(i, first_position);
+                    accum_l -= UI_Frequency * decay;
+                    decay *= U;
+                }
+
+                if (remaining > 0)
+                {
+                    remaining--;
+                    tex2Dstore(STOR_Frequency, int2(i, id.y), 1.0);
+                }
+            }
+
+            uint next = 1;
+            while (remaining > 0 && ((id.x + next) < COBRA_XFRQ_THREAD_WIDTH))
+            {
+                atomicMax(overlap[global_zero + id.x + next++], remaining);
+                remaining = max(int(remaining) - ROUNDUP(BUFFER_WIDTH, COBRA_XFRQ_THREAD_WIDTH), 0);
+            }
+        }
+
+        barrier();
+
+        // 4) shade overlap
+        if (id.y < BUFFER_HEIGHT)
+        {
+            remaining = overlap[global_zero + id.x];
+            for (uint i = start; i < first_position; i++)
+            {
+                if (remaining > 0)
+                {
+                    remaining--;
+                    tex2Dstore(STOR_Frequency, int2(i, id.y), 1.0); // TODO coords
+                }
             }
         }
     }
@@ -417,7 +503,7 @@ namespace COBRA_XFRQ
 
         pass Frequency
         {
-            ComputeShader = CS_Frequency<1, COBRA_XFRQ_THREADS>;
+            ComputeShader = CS_Frequency<COBRA_XFRQ_THREAD_WIDTH, COBRA_XFRQ_THREADS>;
             DispatchSizeX = 1;
             DispatchSizeY = COBRA_XFRQ_DISPATCHES;
         }
