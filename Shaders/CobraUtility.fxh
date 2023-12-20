@@ -1,6 +1,6 @@
 ////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Cobra Utility (CobraUtility.fxh) by SirCobra
-// Version 0.2.0
+// Version 0.2.1
 // You can find info and all my shaders here: https://github.com/LordKobra/CobraFX
 //
 // --------Description---------
@@ -64,8 +64,7 @@
         ui_label     = " Show Mask";
         ui_spacing   = 2;
         ui_tooltip   = "Show the masked pixels. White areas will be preserved, black/grey areas can be affected by\n"
-                    "the shaders encompassed.\n"
-                    "ColorSort_CS.fx: Dark grey pixels show the noise pattern. Light grey pixels show brightness thresholds.";
+                       "the shaders encompassed.";
         ui_category  = COBRA_UTL_UI_GENERAL;
     >                = false;
 
@@ -88,6 +87,28 @@
         ui_category  = COBRA_UTL_UI_COLOR;
     >                = false;
 
+    uniform float UI_BrightnessMin <
+        ui_label     = " Brightness Min";
+        ui_type      = "slider";
+        ui_min       = 0.000;
+        ui_max       = 1.001;
+        ui_step      = 0.001;
+        ui_tooltip   = "The minimum scene luminance. 0.0 is black and 1.0 is white.\n";
+        ui_category  = COBRA_UTL_UI_COLOR;
+        hidden       = (!COBRA_UTL_HIDE_FADE);
+    >                = 0.000;
+
+    uniform float UI_BrightnessMax <
+        ui_label     = " Brightness Max";
+        ui_type      = "slider";
+        ui_min       = 0.000;
+        ui_max       = 1.001;
+        ui_step      = 0.001;
+        ui_tooltip   = "The maximum scene luminance. 0.0 is black and 1.0 is white.\n";
+        ui_category  = COBRA_UTL_UI_COLOR;
+        hidden       = (!COBRA_UTL_HIDE_FADE);
+    >                = 1.001;
+
     uniform float UI_Value <
         ui_label     = " Value";
         ui_type      = "slider";
@@ -95,7 +116,7 @@
         ui_max       = 1.000;
         ui_step      = 0.001;
         ui_tooltip   = "The value describes the brightness of the hue. 0 is black/no hue and 1 is\n"
-                    "maximum hue (e.g. pure red).";
+                       "maximum hue (e.g. pure red).";
         ui_category  = COBRA_UTL_UI_COLOR;
     >                = 1.000;
 
@@ -154,11 +175,11 @@
         ui_label     = " Saturation Range";
         ui_type      = "slider";
         ui_min       = 0.000;
-        ui_max       = 1.000;
+        ui_max       = 1.001;
         ui_step      = 0.001;
         ui_tooltip   = "The tolerance around the saturation.";
         ui_category  = COBRA_UTL_UI_COLOR;
-    >                = 1.000;
+    >                = 1.001;
 
     uniform bool UI_FilterDepth <
         ui_label     = " Filter By Depth";
@@ -174,7 +195,7 @@
         ui_max       = 1.000;
         ui_step      = 0.001;
         ui_tooltip   = "Manual focus depth of the point which has the focus. Ranges from 0.0, which means camera is\n"
-                    "the focus plane, till 1.0 which means the horizon is the focus plane.";
+                       "the focus plane, till 1.0 which means the horizon is the focus plane.";
         ui_category  = COBRA_UTL_UI_DEPTH;
     >                = 0.030;
 
@@ -194,7 +215,7 @@
         ui_min       = 0.000;
         ui_max       = 1.000;
         ui_tooltip   = "The smoothness of the edge of the focus range. Range from 0.0, which means sudden transition,\n"
-                    "till 1.0, which means the effect is smoothly fading towards camera and horizon.";
+                       "till 1.0, which means the effect is smoothly fading towards camera and horizon.";
         ui_step      = 0.001;
         ui_category  = COBRA_UTL_UI_DEPTH;
         hidden       = COBRA_UTL_HIDE_FADE;
@@ -213,7 +234,7 @@
         ui_max       = 180;
         ui_units     = "°";
         ui_tooltip   = "Specifies the estimated Field of View (FOV) you are currently playing with. Range from 1°,\n"
-                    "till 180° (half the scene). Normal games tend to use values between 60° and 90°.";
+                       "till 180° (half the scene). Normal games tend to use values between 60° and 90°.";
         ui_category  = COBRA_UTL_UI_DEPTH;
     >                = 75;
 
@@ -223,7 +244,7 @@
         ui_min       = 0.0;
         ui_max       = 1.0;
         ui_tooltip   = "Specifies the location of the focus point on the horizontal axis. Range from 0, which means\n"
-                    "left screen border, till 1 which means right screen border.";
+                       "left screen border, till 1 which means right screen border.";
         ui_category  = COBRA_UTL_UI_DEPTH;
     >                = 0.5;
 
@@ -233,7 +254,7 @@
         ui_min       = 0.0;
         ui_max       = 1.0;
         ui_tooltip   = "Specifies the location of the focus point on the vertical axis. Range from 0, which means\n"
-                    "upper screen border, till 1 which means bottom screen border.";
+                       "upper screen border, till 1 which means bottom screen border.";
         ui_category  = COBRA_UTL_UI_DEPTH;
     >                = 0.5;
 
@@ -305,17 +326,29 @@
             return fragment;
         }
 
+        // return 1 if in range, otherwise edge
+        float check_range(float value, float ui_val, float ui_range, float ui_edge)
+        {
+            float val = saturate(value);
+            float ui_max = ui_val + ui_range;
+            float ui_min = ui_val - ui_range;
+            bool in_focus = val > ui_min && val < ui_max;
+            float edge = min(abs(ui_max - val), abs(ui_min - val));
+            return (in_focus || (ui_edge == 0.0)) ? in_focus : (1.0 - smoothstep(0.0, ui_edge, edge));
+        }
+
         // The effect can be applied to a specific area like a DoF shader. The basic methods for this were taken with permission
         // from https://github.com/FransBouma/OtisFX/blob/master/Shaders/Emphasize.fx
         float check_focus(float3 rgb, float scene_depth, float2 texcoord)
         {
             // colorfilter
             float3 hsv           = rgb2hsv(rgb);
-            float d1_f           = abs(hsv.b - UI_Value) - UI_ValueRange;
-            d1_f                 = 1.0 - smoothstep(0.0, UI_ValueEdge, d1_f);
+            float d1_f           = check_range(hsv.b, UI_Value, UI_ValueRange, UI_ValueEdge);//max(0.0, abs(hsv.b - UI_Value) - UI_ValueRange);
+            //d1_f                 = 1.0 - smoothstep(0.0, UI_ValueEdge, d1_f);
             bool d2              = abs(hsv.r - UI_Hue) < (UI_HueRange + exp(-(hsv.g * hsv.g) * 200)) || (1.0 - abs(hsv.r - UI_Hue)) < (UI_HueRange + exp(-(hsv.g * hsv.g) * 100));
-            bool d3              = abs(hsv.g - UI_Saturation) <= UI_SaturationRange;
-            float is_color_focus = max(d3 * d2 * d1_f, UI_FilterColor == 0); // color threshold
+            bool d3              = check_range(hsv.g, UI_Saturation, UI_SaturationRange, 0.0);//abs(hsv.g - UI_Saturation) <= UI_SaturationRange;
+            bool d4              = (dot(rgb, 1.0) / 3.0 >= UI_BrightnessMin) && (dot(rgb, 1.0) / 3.0 <= UI_BrightnessMax);
+            float is_color_focus = max(d3 * d2 * d1_f * d4, UI_FilterColor == 0); // color threshold
 
             // depthfilter
             const float DESATURATE_FULL_RANGE = UI_FocusRangeDepth + UI_FocusEdgeDepth;

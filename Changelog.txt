@@ -19,6 +19,9 @@ CobraMask.fx
                 - hsv2rgb function changed
 
 CobraUtility.fxh
+        0.2.1   2023-12-20
+                - added brightness support
+
         0.2.0   2023-11-22
                 - UI elements added
                 - define structure reworked
@@ -29,6 +32,13 @@ CobraUtility.fxh
                 - has a basic function compendium
 
 ColorSort_CS.fx
+        0.6.0   2023-12-20
+                - now depends on CobraUtility.fxh v0.2.1
+                - performance improvements (up to 2.5x speed)
+                - better default quality
+                - removed gradient
+                - reworked brightness thresholds
+
         0.5.2   2023-11-22
                 - now depends on CobraUtility.fxh v0.2.0
                 - rotation improved

@@ -1,6 +1,6 @@
 ////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Color Sort (Colorsort_CS.fx) by SirCobra
-// Version 0.5.2
+// Version 0.6.0
 // You can find info and all my shaders here: https://github.com/LordKobra/CobraFX
 //
 // --------Description---------
@@ -9,8 +9,6 @@
 // The shader consumes a lot of resources. To balance between quality and performance,
 // adjust the preprocessor parameter COLOR_HEIGHT. Check the tooltip for further info.
 // ----------Credits-----------
-// The effect can be applied to a specific area like a DoF shader. The basic methods for this were taken with permission
-// from https://github.com/FransBouma/OtisFX/blob/master/Shaders/Emphasize.fx
 // Thanks to kingeric1992 & Lord of Lunacy for tips on how to construct the algorithm. :)
 // The merge_sort function is adapted from this website: https://www.techiedelight.com/iterative-merge-sort-algorithm-bottom-up/
 // The multithreaded merge sort is constructed as described here: https://www.nvidia.in/docs/IO/67073/nvr-2008-001.pdf
@@ -33,15 +31,15 @@ namespace COBRA_XCOL
 
     // Defines
 
-    #define COBRA_XCOL_VERSION "0.5.2"
+    #define COBRA_XCOL_VERSION "0.6.0"
     #define COBRA_UTL_MODE 0
     #include ".\CobraUtility.fxh"
 
     #ifndef COLOR_HEIGHT
-        #define COLOR_HEIGHT 10 // maybe needs multiple of 64 :/
+        #define COLOR_HEIGHT 12 // maybe needs multiple of 64 :/
     #endif
 
-    #define COBRA_XCOL_THREADS ((uint)16) // 2^n
+    #define COBRA_XCOL_THREADS ((uint)32) // 2^n
     #define COBRA_XCOL_HEIGHT (COLOR_HEIGHT) * 64
     #define COBRA_XCOL_NOISE_WIDTH 4096
     #define COBRA_XCOL_NOISE_HEIGHT 1024
@@ -72,7 +70,7 @@ namespace COBRA_XCOL
         ui_category  = COBRA_UTL_UI_GENERAL;
     >                = 0;
 
-    uniform float UI_BrightnessThresholdStart <
+    /* uniform float UI_BrightnessThresholdStart <
         ui_label     = " Brightness Threshold: Start";
         ui_type      = "slider";
         ui_min       = -0.050;
@@ -90,11 +88,11 @@ namespace COBRA_XCOL
         ui_max       = 1.050;
         ui_step      = 0.001;
         ui_tooltip   = "Pixels with brightness close to this parameter serve as finishing threshold for the sorting\n"
-                       "algorithm and fragment the area. Set both sliders to their maximum value to disable them.";
+        "algorithm and fragment the area. Set both sliders to their maximum value to disable them.";
         ui_category  = COBRA_UTL_UI_GENERAL;
-    >                = 1.050;
+    >                = 1.050; */
 
-    uniform float UI_GradientStrength <
+    /* uniform float UI_GradientStrength <
         ui_label     = " Gradient Strength";
         ui_type      = "slider";
         ui_min       = 0.000;
@@ -104,7 +102,7 @@ namespace COBRA_XCOL
                        "Only recommended in monotone environments. For color gradients on the sorted area, better apply\n"
                        "other effects between Masking and Main effect order.";
         ui_category  = COBRA_UTL_UI_GENERAL;
-    >                = 0.000;
+    >                = 0.000; */
 
     uniform float UI_MaskingNoise <
         ui_label     = " Masking Noise";
@@ -135,7 +133,8 @@ namespace COBRA_XCOL
     uniform bool UI_HotsamplingMode <
         ui_label     = " Hotsampling Mode";
         ui_tooltip   = "The noise will be the same at all resolutions. Activate this, then adjust your options\n"
-                       "and it will stay the same at all resolutions. Turn this off when you do not intend\nto hotsample.";
+                       "and it will stay the same at all resolutions. Turn this off when you do not intend\n"
+                       "to hotsample.";
         ui_category  = COBRA_UTL_UI_GENERAL;
     >                = false;
 
@@ -144,9 +143,9 @@ namespace COBRA_XCOL
     #include ".\CobraUtility.fxh"
 
     uniform int UI_BufferEnd <
-        ui_type = "radio";
+        ui_type     = "radio";
         ui_spacing  = 2;
-        ui_text     = " Preprocessor Options:\n * COLOR_HEIGHT (default value: 10) multiplied by 64 defines the resolution of the effect along the sorting axis. The value needs to be integer. Smaller values give performance at cost of visual fidelity. 8: Performance, 10: Default, 12: Good, 14: High\n\n"
+        ui_text     = " Preprocessor Options:\n * COLOR_HEIGHT (default value: 12) multiplied by 64 defines the resolution of the effect along the sorting axis. The value needs to be integer. Smaller values give performance at cost of visual fidelity. 8: Performance, 12: Default, 16: HD\n\n"
                       " Shader Version: " COBRA_XCOL_VERSION;
         ui_label    = " ";
     > ;
@@ -223,9 +222,9 @@ namespace COBRA_XCOL
 
     // Groupshared Memory
 
-    groupshared float4 color_table[2 * COBRA_XCOL_HEIGHT];
-    groupshared int even_block[2 * COBRA_XCOL_THREADS];
-    groupshared int odd_block[2 * COBRA_XCOL_THREADS];
+    groupshared uint color_table[COBRA_XCOL_HEIGHT];
+    groupshared uint even_block[COBRA_XCOL_THREADS];
+    groupshared uint odd_block[COBRA_XCOL_THREADS];
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////
     //
@@ -238,6 +237,7 @@ namespace COBRA_XCOL
     #include "CobraUtility.fxh"
 
     // rotate the screen
+    // @TODO Rotation is smooth but still not completely correct. Think of a novel solution in the future.
     float2 rotate(float2 texcoord, bool revert)
     {
         uint ANGLE     = UI_RotationAngle;
@@ -300,17 +300,15 @@ namespace COBRA_XCOL
     /// Sorting
 
     // core sorting decider
-    bool min_color(float4 a, float4 b)
+    bool min_color(uint a, uint b)
     {
-        float val = b.a - a.a; // val > 0 for a smaller
-        val       = (abs(val) < 0.1) ? dot(a.rgb - b.rgb, 1) * (1 - 2 * UI_ReverseSort) : val;
-        return !(val < 0.0); // Returns False if a smaller, yes its weird
+        return b < a;
     }
 
     // single thread merge sort
     void merge_sort(int low, int high, int em)
     {
-        float4 temp[COBRA_XCOL_HEIGHT / COBRA_XCOL_THREADS];
+        uint temp[COBRA_XCOL_HEIGHT / COBRA_XCOL_THREADS];
         [unroll] for (int i = 0; i < COBRA_XCOL_HEIGHT / COBRA_XCOL_THREADS; i++)
         {
             temp[i] = color_table[low + i];
@@ -360,28 +358,61 @@ namespace COBRA_XCOL
 
     void PS_MaskColor(float4 vpos : SV_Position, float2 texcoord : TEXCOORD, out float fragment : SV_Target)
     {
+        // @TODO Rework this at some point -> noise scaling above 2036
+        // Also neither separator nor noise look rly good
+
+        // 0.0: zero
+        // 1.0: one
+        float result = 0.0;
+
         // focus
         float3 color      = tex2D(ReShade::BackBuffer, texcoord).rgb;
         float scene_depth = ReShade::GetLinearizedDepth(texcoord);
         bool in_focus     = check_focus(color, scene_depth, texcoord);
 
-        // separator
+        if (!in_focus)
+        {
+            fragment = 1.0;
+            return;
+        }
+
+        // was focus
+        bool was_focus = true;
+        if (vpos.y > 1.0)
+        {
+            int2 prev_coords   = int2(floor(texcoord * float2(BUFFER_WIDTH, BUFFER_HEIGHT))) - int2(0, 1);
+            float3 color2      = tex2Dfetch(ReShade::BackBuffer, prev_coords).rgb;
+            float scene_depth2 = ReShade::GetLinearizedDepth(prev_coords / float2(BUFFER_WIDTH, BUFFER_HEIGHT));
+            was_focus          = check_focus(color2, scene_depth2, prev_coords / float2(BUFFER_WIDTH, BUFFER_HEIGHT));
+        }
+
+        // noise separator
         const uint HS_WIDTH = UI_HotsamplingMode ? 2036 : BUFFER_WIDTH;
-        float2 t_noise      = float2(texcoord.x, texcoord.y) * UI_NoiseSize;
         const float PHI     = UI_RotationAngle * M_PI / 180;
         float2 PHISC;
         sincos(PHI, PHISC.x, PHISC.y);
-        t_noise       = float2(PHISC.y * t_noise.x - PHISC.x * t_noise.y, PHISC.x * t_noise.x + PHISC.y * t_noise.y);
-        t_noise       = float2(fmod(t_noise.x * HS_WIDTH, COBRA_XCOL_NOISE_WIDTH) / (float)COBRA_XCOL_NOISE_WIDTH, fmod(t_noise.y * COBRA_XCOL_HEIGHT, COBRA_XCOL_NOISE_HEIGHT) / (float)COBRA_XCOL_NOISE_HEIGHT);
-        float noise_1 = tex2D(SAM_Noise, t_noise).r; // add some point-color.
-        // bool is_noisy = UI_MaskingNoise > noise_1;
-        bool seperator_1 = abs((color.r + color.g + color.b) / 3 - UI_BrightnessThresholdStart) < 0.04;
-        bool seperator_2 = abs((color.r + color.g + color.b) / 3 - UI_BrightnessThresholdEnd) < 0.04;
-        // bool seperator = seperator_1 || seperator_2;
-        noise_1  = 0.5 * noise_1;
-        noise_1  = seperator_1 ? 0.8 : noise_1;
-        noise_1  = seperator_2 ? 0.7 : noise_1;
-        fragment = saturate(!in_focus + noise_1); // 1 -not in focus 0-0.5 in_focus+noiselevel 0.8:seperator_1 0.7 sep2
+        const float4 XCOLWH_NWH = float4(HS_WIDTH, COBRA_XCOL_HEIGHT, COBRA_XCOL_NOISE_WIDTH, COBRA_XCOL_NOISE_HEIGHT);
+        float2 t_noise          = texcoord.xy * UI_NoiseSize;
+        t_noise                 = PHISC.yx * t_noise.xx + float2(-1.0, 1.0) * PHISC.xy * t_noise.yy;
+        t_noise                 = fmod(t_noise * XCOLWH_NWH.xy, XCOLWH_NWH.zw) / XCOLWH_NWH.zw;
+        float noise             = tex2D(SAM_Noise, t_noise).r; // add some point-color
+
+        bool one = (1 - UI_MaskingNoise < noise) || (!was_focus);
+
+        // bool is_noisy = UI_MaskingNoise > noise;
+        /*  bool start_sep  = abs((color.r + color.g + color.b) / 3 - UI_BrightnessThresholdStart) < 0.04;
+         bool stop_sep   = abs((color.r + color.g + color.b) / 3 - UI_BrightnessThresholdEnd) < 0.04;
+         bool start_next = true;
+         if(vpos.y < COBRA_XCOL_HEIGHT - 1)
+         {
+             int2 next_coords = int2(floor(texcoord * float2(BUFFER_WIDTH, BUFFER_HEIGHT))) + int2(0, 1);
+             float3 color2    = tex2Dfetch(ReShade::BackBuffer, next_coords).rgb;
+             start_next       = abs((color2.r + color2.g + color2.b) / 3 - UI_BrightnessThresholdStart) < 0.04;
+         }
+         start_sep = (start_sep) && (!start_next) && (!stop_sep);
+         result  = start_sep ? 0.1 : (stop_sep ? 0.2 : 0.0);
+         result = result + (1 - 2 * result) * one; */
+        fragment = one;
     }
 
     void PS_SaveBackground(float4 vpos : SV_Position, float2 texcoord : TEXCOORD, out float4 fragment : SV_Target)
@@ -391,17 +422,17 @@ namespace COBRA_XCOL
 
     /// Gradient
 
-    void PS_Gradient(float4 vpos : SV_Position, float2 texcoord : TEXCOORD, out float4 fragment : SV_Target)
+    /* void PS_Gradient(float4 vpos : SV_Position, float2 texcoord : TEXCOORD, out float4 fragment : SV_Target)
     {
         fragment = tex2D(ReShade::BackBuffer, texcoord);
 
         // Gradient Noise
         float2 t_noise = float2(frac(texcoord.x * BUFFER_WIDTH / COBRA_XCOL_NOISE_WIDTH), frac(texcoord.y * COBRA_XCOL_HEIGHT / COBRA_XCOL_NOISE_HEIGHT));
-        float noise_1  = tex2D(SAM_Noise, t_noise).r;
-        noise_1        = (sin(4.0 * M_PI * noise_1) + 4.0 * M_PI * noise_1) / (4.0 * M_PI);
-        noise_1        = UI_GradientStrength * (noise_1 - 0.5); // @TODO Gradient in Saturation, so it's not black/white
-        fragment       = saturate(fragment + float4(noise_1.xxx, 0.0));
-    }
+        float noise  = tex2D(SAM_Noise, t_noise).r;
+        noise        = (sin(4.0 * M_PI * noise) + 4.0 * M_PI * noise) / (4.0 * M_PI);
+        noise        = UI_GradientStrength * (noise - 0.5); // @TODO Gradient in Saturation, so it's not black/white
+        fragment       = saturate(fragment + float4(noise.xxx, 0.0));
+    } */
 
     /// Main
 
@@ -417,54 +448,61 @@ namespace COBRA_XCOL
     // multithread merge sort
     void CS_ColorSort(uint3 id : SV_DispatchThreadID, uint3 tid : SV_GroupThreadID)
     {
-        int row            = tid.y * COBRA_XCOL_HEIGHT / COBRA_XCOL_THREADS;
-        int interval_start = row + tid.x * COBRA_XCOL_HEIGHT;
-        int interval_end   = row - 1 + COBRA_XCOL_HEIGHT / COBRA_XCOL_THREADS + tid.x * COBRA_XCOL_HEIGHT;
+        uint row            = tid.y * COBRA_XCOL_HEIGHT / COBRA_XCOL_THREADS;
+        uint interval_start = row;
+        uint interval_end   = row - 1 + COBRA_XCOL_HEIGHT / COBRA_XCOL_THREADS;
         uint i;
 
         // masking
         [unroll] for (i = 0; i <= 0 - 1 + COBRA_XCOL_HEIGHT / COBRA_XCOL_THREADS; i++)
         {
-            color_table[i + row + tid.x * COBRA_XCOL_HEIGHT] = tex2Dfetch(SAM_HalfRes, int2(id.x, i + row));
+            // 11 bit interval 10 bit brightness, 11 bit position
+            float4 value         = tex2Dfetch(SAM_HalfRes, int2(id.x, i + row));
+            uint interval        = value.a * 2047;          // 11 bit
+            uint brightness      = dot(value.rgb * 340, 1); // 10 bit
+            brightness           = brightness + (1023 - 2 * brightness) * UI_ReverseSort;
+            uint position        = i + row; // 11 bit
+            color_table[i + row] = (interval << 21u) | (brightness << 11u) | position;
         }
+
+        barrier();
 
         if (tid.y == 0)
         {
-            bool was_focus        = false; // last array element
-            bool is_focus         = false; // current array element
-            float noise           = 0.0;
-            bool is_separate      = false;
-            bool was_separate     = false;
-            const bool ACTIVE_SEP = UI_BrightnessThresholdStart < 1.02 || UI_BrightnessThresholdEnd < 1.02;
-            bool separate_area    = !ACTIVE_SEP;
-            int mask_val          = 0;
+            // const bool ACTIVE_SEP = UI_BrightnessThresholdStart < 1.02 || UI_BrightnessThresholdEnd < 1.02;
+            // bool active_area      = !ACTIVE_SEP;
+            uint mask_val = 0;
             for (i = 0; i < COBRA_XCOL_HEIGHT; i++)
             {
-                // determine focus mask
-                // color_table[i + tid.x * COBRA_XCOL_HEIGHT] = tex2Dfetch(SAM_HalfRes, int2(id.x, i));
-                is_focus = color_table[i + tid.x * COBRA_XCOL_HEIGHT].a < 0.9; // 1 -not in focus 0-0.5 in_focus+noiselevel 0.8:seperator_1 0.7 sep2
-                // thresholding cells
-                noise         = color_table[i + tid.x * COBRA_XCOL_HEIGHT].a < 0.6 ? 2.0 * color_table[i + tid.x * COBRA_XCOL_HEIGHT].a : 0.0;
-                is_separate   = is_focus && UI_MaskingNoise > noise;
-                separate_area = ACTIVE_SEP && is_focus && color_table[i + tid.x * COBRA_XCOL_HEIGHT].a > 0.75 ? true : separate_area;
-                separate_area = ACTIVE_SEP && is_focus && color_table[i + tid.x * COBRA_XCOL_HEIGHT].a > 0.65 && is_focus && color_table[i + tid.x * COBRA_XCOL_HEIGHT].a < 0.75 ? false : separate_area;
-
-                if (!(is_focus && was_focus && separate_area && !(is_separate && !was_separate)))
-                    mask_val++;
-
-                was_focus                                    = is_focus;
-                was_separate                                 = is_separate;
-                color_table[i + tid.x * COBRA_XCOL_HEIGHT].a = (float)mask_val + 0.5 * is_focus; // is the is_focus carryover depreciated? - Yes :)
+                // 0.0: zero
+                // 0.1  zero + start_sep
+                // 0.2  zero + stop_sep
+                // 0.8: one + stop_sep
+                // 0.9: one + start_sep
+                // 1.0: one
+                float focus_val = (color_table[i] >> 21u) / 2047.0;
+                bool one        = focus_val > 0.5;
+                // bool stop_sep = abs(one-focus_val) > 0.15;
+                // active_area = active_area & (!stop_sep);
+                // bool add = one + !active_area; // stop comes imediately, start delayed
+                // mask_val += add;
+                mask_val += one;
+                // bool start_sep = abs(one-focus_val) > 0.05 && !stop_sep;
+                // active_area = active_area + start_sep;
+                uint final_val = (2047 - mask_val);
+                color_table[i] = (final_val << 21u) | (color_table[i] & uint(2097151));
             }
         }
 
         barrier();
+
         // sort the small arrays
         merge_sort(interval_start, interval_end, 1);
+
         // combine
-        float4 key[COBRA_XCOL_THREADS];
-        float4 key_sorted[COBRA_XCOL_THREADS];
-        float4 sorted_array[2 * COBRA_XCOL_HEIGHT / COBRA_XCOL_THREADS];
+        uint key[COBRA_XCOL_THREADS];
+        uint key_sorted[COBRA_XCOL_THREADS];
+        uint sorted_array[2 * COBRA_XCOL_HEIGHT / COBRA_XCOL_THREADS];
         for (i = 1; i < COBRA_XCOL_THREADS; i = 2 * i) // the amount of merges, just like a normal merge sort
         {
             barrier();
@@ -473,7 +511,7 @@ namespace COBRA_XCOL
             for (int j = 0; j < group_size; j++) // probably redundancy between threads. optimzable
             {
                 int curr  = tid.y - (tid.y % group_size) + j;
-                key[curr] = color_table[curr * COBRA_XCOL_HEIGHT / COBRA_XCOL_THREADS + tid.x * COBRA_XCOL_HEIGHT];
+                key[curr] = color_table[curr * COBRA_XCOL_HEIGHT / COBRA_XCOL_THREADS];
             }
 
             // sort keys
@@ -516,62 +554,63 @@ namespace COBRA_XCOL
 
             // calculate the real distance
             int diff_sorted = (idy_sorted % group_size) - (tid.y % (group_size / 2));
-            int pos1        = tid.y * COBRA_XCOL_HEIGHT / COBRA_XCOL_THREADS;
+            uint pos1       = tid.y * COBRA_XCOL_HEIGHT / COBRA_XCOL_THREADS;
             bool is_even    = (tid.y % group_size) < group_size / 2;
             if (is_even)
             {
-                even_block[idy_sorted + tid.x * COBRA_XCOL_THREADS] = pos1;
+                even_block[idy_sorted] = pos1;
                 if (diff_sorted == 0)
                 {
-                    odd_block[idy_sorted + tid.x * COBRA_XCOL_THREADS] = (tid.y - (tid.y % group_size) + group_size / 2) * COBRA_XCOL_HEIGHT / COBRA_XCOL_THREADS;
+                    odd_block[idy_sorted] = (tid.y - (tid.y % group_size) + group_size / 2) * COBRA_XCOL_HEIGHT / COBRA_XCOL_THREADS;
                 }
                 else
                 {
                     int odd_block_search_start = (tid.y - (tid.y % group_size) + group_size / 2 + diff_sorted - 1) * COBRA_XCOL_HEIGHT / COBRA_XCOL_THREADS;
                     for (int i2 = 0; i2 < COBRA_XCOL_HEIGHT / COBRA_XCOL_THREADS; i2++)
                     { // n pls make logn in future
-                        odd_block[idy_sorted + tid.x * COBRA_XCOL_THREADS] = odd_block_search_start + i2;
-                        if (min_color(key_sorted[idy_sorted], color_table[odd_block_search_start + i2 + tid.x * COBRA_XCOL_HEIGHT]))
+                        odd_block[idy_sorted] = odd_block_search_start + i2;
+                        if (min_color(key_sorted[idy_sorted], color_table[odd_block_search_start + i2]))
                         {
                             break;
                         }
                         else
                         {
-                            odd_block[idy_sorted + tid.x * COBRA_XCOL_THREADS] = odd_block_search_start + i2 + 1;
+                            odd_block[idy_sorted] = odd_block_search_start + i2 + 1;
                         }
                     }
                 }
             }
             else
             {
-                odd_block[idy_sorted + tid.x * COBRA_XCOL_THREADS] = pos1;
+                odd_block[idy_sorted] = pos1;
                 if (diff_sorted == 0)
                 {
-                    even_block[idy_sorted + tid.x * COBRA_XCOL_THREADS] = (tid.y - (tid.y % group_size)) * COBRA_XCOL_HEIGHT / COBRA_XCOL_THREADS;
+                    even_block[idy_sorted] = (tid.y - (tid.y % group_size)) * COBRA_XCOL_HEIGHT / COBRA_XCOL_THREADS;
                 }
                 else
                 {
                     int even_block_search_start = (tid.y - (tid.y % group_size) + diff_sorted - 1) * COBRA_XCOL_HEIGHT / COBRA_XCOL_THREADS;
                     for (int i2 = 0; i2 < COBRA_XCOL_HEIGHT / COBRA_XCOL_THREADS; i2++)
                     {
-                        even_block[idy_sorted + tid.x * COBRA_XCOL_THREADS] = even_block_search_start + i2;
-                        if (min_color(key_sorted[idy_sorted], color_table[even_block_search_start + i2 + tid.x * COBRA_XCOL_HEIGHT]))
+                        even_block[idy_sorted] = even_block_search_start + i2;
+                        if (min_color(key_sorted[idy_sorted], color_table[even_block_search_start + i2]))
                         {
                             break;
                         }
                         else
                         {
-                            even_block[idy_sorted + tid.x * COBRA_XCOL_THREADS] = even_block_search_start + i2 + 1;
+                            even_block[idy_sorted] = even_block_search_start + i2 + 1;
                         }
                     }
                 }
             }
 
-            // find the corresponding block
             barrier();
+
+            // find the corresponding block
             int even_start, even_end, odd_start, odd_end;
-            even_start = even_block[tid.y + tid.x * COBRA_XCOL_THREADS];
-            odd_start  = odd_block[tid.y + tid.x * COBRA_XCOL_THREADS];
+            even_start = even_block[tid.y];
+            odd_start  = odd_block[tid.y];
             if ((tid.y + 1) % group_size == 0)
             {
                 even_end = (tid.y - (tid.y % group_size) + group_size / 2) * COBRA_XCOL_HEIGHT / COBRA_XCOL_THREADS;
@@ -579,8 +618,8 @@ namespace COBRA_XCOL
             }
             else
             {
-                even_end = even_block[tid.y + 1 + tid.x * COBRA_XCOL_THREADS];
-                odd_end  = odd_block[tid.y + 1 + tid.x * COBRA_XCOL_THREADS];
+                even_end = even_block[tid.y + 1];
+                odd_end  = odd_block[tid.y + 1];
             }
 
             // sort the block
@@ -589,41 +628,43 @@ namespace COBRA_XCOL
             int cc           = 0;
             while (even_counter < even_end && odd_counter < odd_end)
             {
-                if (min_color(color_table[even_counter + tid.x * COBRA_XCOL_HEIGHT], color_table[odd_counter + tid.x * COBRA_XCOL_HEIGHT]))
+                if (min_color(color_table[even_counter], color_table[odd_counter]))
                 {
-                    sorted_array[cc++] = color_table[even_counter++ + tid.x * COBRA_XCOL_HEIGHT];
+                    sorted_array[cc++] = color_table[even_counter++];
                 }
                 else
                 {
-                    sorted_array[cc++] = color_table[odd_counter++ + tid.x * COBRA_XCOL_HEIGHT];
+                    sorted_array[cc++] = color_table[odd_counter++];
                 }
             }
 
             while (even_counter < even_end)
             {
-                sorted_array[cc++] = color_table[even_counter++ + tid.x * COBRA_XCOL_HEIGHT];
+                sorted_array[cc++] = color_table[even_counter++];
             }
 
             while (odd_counter < odd_end)
             {
-                sorted_array[cc++] = color_table[odd_counter++ + tid.x * COBRA_XCOL_HEIGHT];
+                sorted_array[cc++] = color_table[odd_counter++];
             }
 
-            // replace
             barrier();
-            // int sorted_array_size = cc;
+
+            // replace
             int global_position = odd_start + even_start - (tid.y - (tid.y % group_size) + group_size / 2) * COBRA_XCOL_HEIGHT / COBRA_XCOL_THREADS;
             for (int w = 0; w < cc; w++)
             {
-                color_table[global_position + w + tid.x * COBRA_XCOL_HEIGHT] = sorted_array[w];
+                color_table[global_position + w] = sorted_array[w];
             }
         }
 
         barrier();
+
         [unroll] for (i = 0; i < COBRA_XCOL_HEIGHT / COBRA_XCOL_THREADS; i++)
         {
-            color_table[row + i + tid.x * COBRA_XCOL_HEIGHT].a = color_table[row + i + tid.x * COBRA_XCOL_HEIGHT].a % 1.0;
-            tex2Dstore(STOR_ColorSort, float2(id.x, row + i), color_table[row + i + tid.x * COBRA_XCOL_HEIGHT]);
+            uint y       = row + i;
+            float4 color = tex2Dfetch(SAM_HalfRes, int2(id.x, color_table[y] & 2047));
+            tex2Dstore(STOR_ColorSort, float2(id.x, row + i), color);
         }
     }
 
@@ -634,7 +675,7 @@ namespace COBRA_XCOL
         fragment             = tex2D(SAM_Background, texcoord);
         float fragment_depth = ReShade::GetLinearizedDepth(texcoord);
         fragment             = check_focus(fragment.rgb, fragment_depth, texcoord) ? tex2D(SAM_ColorSort, texcoord_new) : fragment;
-        fragment             = UI_ShowMask ? tex2D(SAM_Mask, texcoord).rrrr : fragment;
+        fragment.rgb         = UI_ShowMask ? 1.0 - tex2D(SAM_Mask, texcoord).rrr : fragment.rgb;
         fragment             = (UI_ShowSelectedHue * UI_FilterColor) ? show_hue(texcoord, fragment) : fragment;
     }
 
@@ -671,11 +712,11 @@ namespace COBRA_XCOL
             RenderTarget = TEX_Background;
         }
 
-        pass Gradient
+        /* pass Gradient
         {
             VertexShader = PostProcessVS;
             PixelShader  = PS_Gradient;
-        }
+        } */
     }
 
     technique TECH_ColorSortMain <
@@ -698,8 +739,8 @@ namespace COBRA_XCOL
 
         pass sortColor
         {
-            ComputeShader = CS_ColorSort<2, COBRA_XCOL_THREADS>;
-            DispatchSizeX = BUFFER_WIDTH / 2;
+            ComputeShader = CS_ColorSort<1, COBRA_XCOL_THREADS>;
+            DispatchSizeX = BUFFER_WIDTH;
             DispatchSizeY = 1;
         }
 
