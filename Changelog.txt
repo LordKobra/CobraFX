@@ -38,6 +38,7 @@ ColorSort_CS.fx
                 - better default quality
                 - removed gradient
                 - reworked brightness thresholds
+                - fixed bug where missing barrier caused thread desynchronisation, flickering or artifacts
 
         0.5.2   2023-11-22
                 - now depends on CobraUtility.fxh v0.2.0
