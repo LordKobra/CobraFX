@@ -43,7 +43,7 @@
         #define M_E 2.71828183
     #endif
 
-    #define COBRA_UTL_VERSION "0.2.0"
+    #define COBRA_UTL_VERSION "0.2.1"
     #define COBRA_UTL_UI_GENERAL "\n / General Options /\n"
     #define COBRA_UTL_UI_COLOR "\n /  Color Masking  /\n"
     #define COBRA_UTL_UI_DEPTH "\n /  Depth Masking  /\n"
