@@ -343,10 +343,9 @@
         {
             // colorfilter
             float3 hsv           = rgb2hsv(rgb);
-            float d1_f           = check_range(hsv.b, UI_Value, UI_ValueRange, UI_ValueEdge);//max(0.0, abs(hsv.b - UI_Value) - UI_ValueRange);
-            //d1_f                 = 1.0 - smoothstep(0.0, UI_ValueEdge, d1_f);
+            float d1_f           = check_range(hsv.b, UI_Value, UI_ValueRange, UI_ValueEdge);
             bool d2              = abs(hsv.r - UI_Hue) < (UI_HueRange + exp(-(hsv.g * hsv.g) * 200)) || (1.0 - abs(hsv.r - UI_Hue)) < (UI_HueRange + exp(-(hsv.g * hsv.g) * 100));
-            bool d3              = check_range(hsv.g, UI_Saturation, UI_SaturationRange, 0.0);//abs(hsv.g - UI_Saturation) <= UI_SaturationRange;
+            bool d3              = check_range(hsv.g, UI_Saturation, UI_SaturationRange, 0.0);
             bool d4              = (dot(rgb, 1.0) / 3.0 >= UI_BrightnessMin) && (dot(rgb, 1.0) / 3.0 <= UI_BrightnessMax);
             float is_color_focus = max(d3 * d2 * d1_f * d4, UI_FilterColor == 0); // color threshold
 

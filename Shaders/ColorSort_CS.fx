@@ -8,6 +8,7 @@
 // You can filter the affected pixels by depth and by color.
 // The shader consumes a lot of resources. To balance between quality and performance,
 // adjust the preprocessor parameter COLOR_HEIGHT. Check the tooltip for further info.
+//
 // ----------Credits-----------
 // Thanks to kingeric1992 & Lord of Lunacy for tips on how to construct the algorithm. :)
 // The merge_sort function is adapted from this website: https://www.techiedelight.com/iterative-merge-sort-algorithm-bottom-up/
@@ -69,40 +70,6 @@ namespace COBRA_XCOL
         ui_tooltip   = "Rotation of the sorting axis.";
         ui_category  = COBRA_UTL_UI_GENERAL;
     >                = 0;
-
-    /* uniform float UI_BrightnessThresholdStart <
-        ui_label     = " Brightness Threshold: Start";
-        ui_type      = "slider";
-        ui_min       = -0.050;
-        ui_max       = 1.050;
-        ui_step      = 0.001;
-        ui_tooltip   = "Pixels with brightness close to this parameter serve as starting threshold for the sorting\n"
-                       "algorithm and fragment the area. Set both sliders to their maximum value to disable them.";
-        ui_category  = COBRA_UTL_UI_GENERAL;
-    >                = 1.050;
-
-    uniform float UI_BrightnessThresholdEnd <
-        ui_label     = " Brightness Threshold: End";
-        ui_type      = "slider";
-        ui_min       = -0.050;
-        ui_max       = 1.050;
-        ui_step      = 0.001;
-        ui_tooltip   = "Pixels with brightness close to this parameter serve as finishing threshold for the sorting\n"
-        "algorithm and fragment the area. Set both sliders to their maximum value to disable them.";
-        ui_category  = COBRA_UTL_UI_GENERAL;
-    >                = 1.050; */
-
-    /* uniform float UI_GradientStrength <
-        ui_label     = " Gradient Strength";
-        ui_type      = "slider";
-        ui_min       = 0.000;
-        ui_max       = 1.000;
-        ui_step      = 0.001;
-        ui_tooltip   = "Strength of the noise applied to the masked area. More noise results in more brightness variance.\n"
-                       "Only recommended in monotone environments. For color gradients on the sorted area, better apply\n"
-                       "other effects between Masking and Main effect order.";
-        ui_category  = COBRA_UTL_UI_GENERAL;
-    >                = 0.000; */
 
     uniform float UI_MaskingNoise <
         ui_label     = " Masking Noise";
@@ -398,20 +365,6 @@ namespace COBRA_XCOL
         float noise             = tex2D(SAM_Noise, t_noise).r; // add some point-color
 
         bool one = (1 - UI_MaskingNoise < noise) || (!was_focus);
-
-        // bool is_noisy = UI_MaskingNoise > noise;
-        /*  bool start_sep  = abs((color.r + color.g + color.b) / 3 - UI_BrightnessThresholdStart) < 0.04;
-         bool stop_sep   = abs((color.r + color.g + color.b) / 3 - UI_BrightnessThresholdEnd) < 0.04;
-         bool start_next = true;
-         if(vpos.y < COBRA_XCOL_HEIGHT - 1)
-         {
-             int2 next_coords = int2(floor(texcoord * float2(BUFFER_WIDTH, BUFFER_HEIGHT))) + int2(0, 1);
-             float3 color2    = tex2Dfetch(ReShade::BackBuffer, next_coords).rgb;
-             start_next       = abs((color2.r + color2.g + color2.b) / 3 - UI_BrightnessThresholdStart) < 0.04;
-         }
-         start_sep = (start_sep) && (!start_next) && (!stop_sep);
-         result  = start_sep ? 0.1 : (stop_sep ? 0.2 : 0.0);
-         result = result + (1 - 2 * result) * one; */
         fragment = one;
     }
 
@@ -419,20 +372,6 @@ namespace COBRA_XCOL
     {
         fragment = tex2D(ReShade::BackBuffer, texcoord);
     }
-
-    /// Gradient
-
-    /* void PS_Gradient(float4 vpos : SV_Position, float2 texcoord : TEXCOORD, out float4 fragment : SV_Target)
-    {
-        fragment = tex2D(ReShade::BackBuffer, texcoord);
-
-        // Gradient Noise
-        float2 t_noise = float2(frac(texcoord.x * BUFFER_WIDTH / COBRA_XCOL_NOISE_WIDTH), frac(texcoord.y * COBRA_XCOL_HEIGHT / COBRA_XCOL_NOISE_HEIGHT));
-        float noise  = tex2D(SAM_Noise, t_noise).r;
-        noise        = (sin(4.0 * M_PI * noise) + 4.0 * M_PI * noise) / (4.0 * M_PI);
-        noise        = UI_GradientStrength * (noise - 0.5); // @TODO Gradient in Saturation, so it's not black/white
-        fragment       = saturate(fragment + float4(noise.xxx, 0.0));
-    } */
 
     /// Main
 
@@ -469,28 +408,16 @@ namespace COBRA_XCOL
 
         if (tid.y == 0)
         {
-            // const bool ACTIVE_SEP = UI_BrightnessThresholdStart < 1.02 || UI_BrightnessThresholdEnd < 1.02;
-            // bool active_area      = !ACTIVE_SEP;
             uint mask_val = 0;
             for (i = 0; i < COBRA_XCOL_HEIGHT; i++)
             {
                 // 0.0: zero
-                // 0.1  zero + start_sep
-                // 0.2  zero + stop_sep
-                // 0.8: one + stop_sep
-                // 0.9: one + start_sep
                 // 1.0: one
                 float focus_val = (color_table[i] >> 21u) / 2047.0;
                 bool one        = focus_val > 0.5;
-                // bool stop_sep = abs(one-focus_val) > 0.15;
-                // active_area = active_area & (!stop_sep);
-                // bool add = one + !active_area; // stop comes imediately, start delayed
-                // mask_val += add;
-                mask_val += one;
-                // bool start_sep = abs(one-focus_val) > 0.05 && !stop_sep;
-                // active_area = active_area + start_sep;
-                uint final_val = (2047 - mask_val);
-                color_table[i] = (final_val << 21u) | (color_table[i] & uint(2097151));
+                mask_val       += one;
+                uint final_val  = (2047 - mask_val);
+                color_table[i]  = (final_val << 21u) | (color_table[i] & uint(2097151));
             }
         }
 
@@ -711,12 +638,6 @@ namespace COBRA_XCOL
             PixelShader  = PS_SaveBackground;
             RenderTarget = TEX_Background;
         }
-
-        /* pass Gradient
-        {
-            VertexShader = PostProcessVS;
-            PixelShader  = PS_Gradient;
-        } */
     }
 
     technique TECH_ColorSortMain <
