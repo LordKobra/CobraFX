@@ -1,6 +1,6 @@
 ////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Realistic Long-Exposure (RealLongExposure.fx) by SirCobra
-// Version 0.5.3
+// Version 0.5.4
 // You can find info and all my shaders here: https://github.com/LordKobra/CobraFX
 //
 // --------Description---------
@@ -32,7 +32,7 @@ namespace COBRA_RLE
     ////////////////////////////////////////////////////////////////////////////////////////////////////////
 
     // Defines
-    #define COBRA_RLE_VERSION "0.5.3"
+    #define COBRA_RLE_VERSION "0.5.4"
 
     #define COBRA_UTL_MODE 0
     #include ".\CobraUtility.fxh"
@@ -46,7 +46,7 @@ namespace COBRA_RLE
         #define COBRA_RLE_COMPUTE 0
     #endif
 
-    #define COBRA_RLE_YSIZE 20
+    #define COBRA_RLE_TSIZE 32
     // UI
 
     uniform float UI_ExposureDuration <
@@ -335,7 +335,7 @@ namespace COBRA_RLE
             timer_value[0].z  = timer % COBRA_RLE_TIME_MAX;
             timer_value[0].w  = (UI_StartExposure && (abs(timer_value[0].z - timer_value[0].x) > UI_Delay) && (abs(timer_value[0].z - timer_value[0].x) < 1000.0 * UI_ExposureDuration));
             uint passes = atomicAdd(STOR_SyncCount, int2(0, 0), 1u);
-            if (passes == ROUNDUP(BUFFER_WIDTH, 8) * COBRA_RLE_YSIZE - 1)
+            if (passes == ROUNDUP(BUFFER_WIDTH, COBRA_RLE_TSIZE) * ROUNDUP(BUFFER_HEIGHT, COBRA_RLE_TSIZE) - 1)
             {
                 float4 frag = 0.0;
                 frag.a      = 1.0;
@@ -462,9 +462,9 @@ namespace COBRA_RLE
 
         pass LongExposure
         {
-            ComputeShader = CS_LongExposure<8, ROUNDUP(BUFFER_HEIGHT, COBRA_RLE_YSIZE)>;
-            DispatchSizeX = ROUNDUP(BUFFER_WIDTH,8);
-            DispatchSizeY = COBRA_RLE_YSIZE;
+            ComputeShader = CS_LongExposure<COBRA_RLE_TSIZE, COBRA_RLE_TSIZE>;
+            DispatchSizeX = ROUNDUP(BUFFER_WIDTH, COBRA_RLE_TSIZE);
+            DispatchSizeY = ROUNDUP(BUFFER_HEIGHT, COBRA_RLE_TSIZE);
         }
 
 #endif
