@@ -1,6 +1,6 @@
 ////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Cobra Mask (CobraMask.fx) by SirCobra
-// Version 0.3.0
+// Version 0.4.0
 // You can find info and all my shaders here: https://github.com/LordKobra/CobraFX
 //
 // --------Description---------
@@ -34,10 +34,14 @@ namespace COBRA_MSK
     ////////////////////////////////////////////////////////////////////////////////////////////////////////
 
     // Defines
-    #define COBRA_MSK_VERSION "0.3.0"
+    #define COBRA_MSK_VERSION "0.4.0"
 
     #define COBRA_UTL_MODE 0
     #include ".\CobraUtility.fxh"
+
+    #if (COBRA_UTL_VERSION_NUMBER < 1030)
+        #error "CobraUtility.fxh outdated! Please update CobraFX!"
+    #endif
 
     // UI
 
@@ -74,7 +78,11 @@ namespace COBRA_MSK
     {
         Width  = BUFFER_WIDTH;
         Height = BUFFER_HEIGHT;
-        Format = RGBA16F;
+#if (BUFFER_COLOR_BIT_DEPTH == 8)
+        Format = RGBA8;
+#else 
+        Format = RGBA16F; // We need a strong alpha channel for gradient blending
+#endif
     };
 
     // Sampler
@@ -105,17 +113,25 @@ namespace COBRA_MSK
 
     void PS_MaskStart(float4 vpos : SV_Position, float2 texcoord : TEXCOORD, out float4 fragment : SV_Target)
     {
-        float4 color   = tex2Dfetch(ReShade::BackBuffer, floor(vpos.xy));
+        float4 srgb    = tex2Dfetch(ReShade::BackBuffer, floor(vpos.xy));
+        float3 lrgb    = enc_to_lin(srgb.rgb);
         float depth    = ReShade::GetLinearizedDepth(texcoord);
-        float in_focus = check_focus(color.rgb, depth, texcoord);
-        fragment       = float4(color.rgb, in_focus);
+        float in_focus = check_focus(lrgb, depth, texcoord);
+        fragment       = float4(srgb.rgb, in_focus);
     }
 
     void PS_MaskEnd(float4 vpos : SV_Position, float2 texcoord : TEXCOORD, out float4 fragment : SV_Target)
     {
-        fragment = tex2Dfetch(SAM_Mask, floor(vpos.xy));
-        fragment = UI_ShowMask ? 1 - fragment.aaaa : lerp(tex2Dfetch(ReShade::BackBuffer, floor(vpos.xy)), fragment, (1.0 - fragment.a * UI_Opacity));
-        fragment = (UI_ShowSelectedHue * UI_FilterColor) ? show_hue(texcoord, fragment) : fragment;
+        fragment     = tex2Dfetch(SAM_Mask, floor(vpos.xy));
+        fragment.rgb = enc_to_lin(fragment.rgb);
+        float4 srgb  = tex2Dfetch(ReShade::BackBuffer, floor(vpos.xy));
+        float3 lrgb  = enc_to_lin(srgb.rgb);
+        fragment.rgb    = UI_ShowMask
+                      ? 1.0 - fragment.aaa
+                      : lerp(lrgb, fragment.rgb, (1.0 - fragment.a * UI_Opacity)); // @BlendOp
+        fragment.rgb    = (UI_ShowSelectedHue * UI_FilterColor) ? show_hue(texcoord, fragment.rgb) : fragment.rgb;
+        fragment.rgb    = lin_to_enc(fragment.rgb);
+        fragment.a      = srgb.a; // preserve alpha
     }
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////

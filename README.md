@@ -39,13 +39,13 @@ adjust the preprocessor parameter `COLOR_HEIGHT`. `COLOR_HEIGHT` (default value:
 
 ## Realistic Long-Exposure
 
-**RealLongExposure.fx** enables you to capture changes over time, like in long-exposure photography. It will record the game's output for a user-defined amount of seconds to create the final image, just as a camera would do in real life. A `Gamma` slider allows to regulate the highlight persistence.
+**RealLongExposure.fx** enables you to capture changes over time, like in long-exposure photography. It will record the game's output for a user-defined amount of seconds to create the final image, just as a camera would do in real life. A `Highlight Boost` slider allows to regulate the highlight persistence.
 
 If you want a continuous effect, make sure to also check out the old [LongExposure.fx](/Shaders/outdated/LongExposure.fx) which fakes the effect or [Trails.fx by BlueSkyDefender](https://github.com/BlueSkyDefender/AstrayFX/blob/master/Shaders/Trails.fx) for similar brightness results with improved smoothness and depth effects.
 
 Tip: Right-click the `Start Exposure` button to bind this functionality to a hotkey for convenient usage.
 
-<p align="center"><img src="https://steamuserimages-a.akamaihd.net/ugc/2211891143717970227/51DC0950C55687C0DF7ABC719238AA65935980C3/?imw=5000&imh=5000&ima=fit&impolicy=Letterbox&imcolor=%23000000&letterbox=false">
+<p align="center"><img src="https://images.steamusercontent.com/ugc/13992887899030786996/E3A42C75840D2FD8FFF73579FBFF0338072034F5/?imw=5000&imh=5000&ima=fit&impolicy=Letterbox&imcolor=%23000000&letterbox=false">
 <i>Realistic Long-Exposure in action</i></p>
 
 ## Droste Effect
@@ -72,6 +72,13 @@ This shader works the following way: In the effect window, you put "Cobra Mask: 
 <p align="center"><img src="https://steamuserimages-a.akamaihd.net/ugc/2211891143717972938/5D512DCDB800A2A3AC3329238660685A5CC12E26/?imw=5000&imh=5000&ima=fit&impolicy=Letterbox&imcolor=%23000000&letterbox=false">
 <i> Cobra Mask applying the <a href="https://github.com/Daodan317081/reshade-shaders">Comic.fx</a> debug layer to the foreground</i>
 </p>
+
+## Greyscale
+
+**Greyscale.fx** allows to transform the image into greyscale. You can chose from popular metrics whether to preserve lightness or perceived luminance.
+
+<p align="center"><img src="https://images.steamusercontent.com/ugc/9738225414391796124/CC92F36240D8EC221C1CFBD4B9C6C0F23315DE74/?imw=5000&imh=5000&ima=fit&impolicy=Letterbox&imcolor=%23000000&letterbox=false">
+<i>Greyscale in action</i></p>
 
 ## Installation
 

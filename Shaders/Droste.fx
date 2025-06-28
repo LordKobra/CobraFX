@@ -121,10 +121,13 @@ namespace COBRA_DRO
 
     vs2ps VS_Droste(uint id : SV_VertexID)
     {
-        const float2 AR                 = UI_EffectType == 0 ? float2(float(BUFFER_WIDTH) / BUFFER_HEIGHT, 1.0) : float2(1.0, 1.0);
+        const float2 AR                 = UI_EffectType == 0 ? float2(float(BUFFER_WIDTH) / BUFFER_HEIGHT, 1.0) 
+                                                             : float2(1.0, 1.0);
         const float2 OFFSET             = float2(UI_X_Offset, UI_Y_Offset);
-        const float NEW_CENTER_ANGLE    = abs(OFFSET.x) + abs(OFFSET.y) < 0.01 ? 1 : (atan2_approx(-OFFSET.x * AR.x, -OFFSET.y) + M_PI) / (2 * M_PI);
-        const float INNER_RING          = 1 / exp(1 / (UI_Frequency));
+        const float NEW_CENTER_ANGLE    = abs(OFFSET.x) + abs(OFFSET.y) < 0.01 
+                                          ? 1.0 
+                                          : (atan2_approx(-OFFSET.x * AR.x, -OFFSET.y) + M_PI) / (2.0 * M_PI);
+        const float INNER_RING          = 1.0 / exp(1.0 / (UI_Frequency));
         return vs_basic(id, float2(NEW_CENTER_ANGLE, INNER_RING));
     }
 
@@ -136,35 +139,34 @@ namespace COBRA_DRO
         float2 new_pos      = (o.uv.xy - 0.5 + OFFSET) * AR;
 
         // calculate orientation of center and pixel
-        const float NEW_CENTER_DISTANCE =  (1 - 2.0 * max(abs(OFFSET.x), abs(OFFSET.y)));
+        const float NEW_CENTER_DISTANCE =  (1.0 - 2.0 * max(abs(OFFSET.x), abs(OFFSET.y)));
         const float NEW_CENTER_ANGLE    = o.uv.z;
 
         // calculate and normalize angle
-        float angle                     = (atan2_approx(new_pos.x, new_pos.y) + M_PI) / (2 * M_PI);
+        float angle                     = (atan2_approx(new_pos.x, new_pos.y) + M_PI) / (2.0 * M_PI);
         float val                       = angle * UI_Spiral;
-        angle                           = 1 - fmod(abs(abs(angle - NEW_CENTER_ANGLE) - 0.5), 0.5) * 2;
+        angle                           = 1.0 - fmod(abs(abs(angle - NEW_CENTER_ANGLE) - 0.5), 0.5) * 2.0;
 
         //smooth off-center projection
-        float angle_smooth = (1 - cos(angle * angle * M_PI)) / 2;
-        float intensity    = lerp(NEW_CENTER_DISTANCE, 1, angle_smooth);
+        float angle_smooth = (1.0 - cos(angle * angle * M_PI)) / 2.0;
+        float intensity    = lerp(NEW_CENTER_DISTANCE, 1.0, angle_smooth);
 
         // calculate distance from center
-
-        float cicle_dist = sqrt(dot(new_pos,new_pos)) / intensity;
+        float cicle_dist = sqrt(dot(new_pos, new_pos)) / intensity;
         float rect_dist  = max(abs(new_pos.x), abs(new_pos.y));
         float rcdist     = UI_EffectType == 0 ? cicle_dist : rect_dist;
-        rcdist           = log(rcdist * (10 - UI_Zoom)) * UI_Frequency;
+        rcdist           = log(rcdist * (10.0 - UI_Zoom)) * UI_Frequency;
         val             += rcdist;
-        val              = (exp(fmod(val, 1) / UI_Frequency) - 1) / (rcp(o.uv.w) - 1);
+        val              = (exp(fmod(val, 1.0) / UI_Frequency) - 1.0) / (rcp(o.uv.w) - 1.0);
 
         // normalized vector
-        float vector_length     = sqrt(dot(new_pos,new_pos));
+        float vector_length     = sqrt(dot(new_pos, new_pos));
         float unit_circle_ratio = UI_EffectType == 0 ? 0.5 / vector_length : 0.5 / max(abs(new_pos.x), abs(new_pos.y));
         float2 normalized       = new_pos * unit_circle_ratio;
 
         // calculate relative position towards outer and inner ring and interpolate
         const float INNER_RING = o.uv.w * UI_OuterRing;
-        float real_scale       = lerp(INNER_RING, UI_OuterRing,val);
+        float real_scale       = lerp(INNER_RING, UI_OuterRing, val);
         real_scale            *= intensity;
         float2 adjusted        = normalized * real_scale / AR + 0.5 - OFFSET;
         fragment               = tex2D(ReShade::BackBuffer, adjusted);

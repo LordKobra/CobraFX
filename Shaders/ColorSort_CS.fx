@@ -1,6 +1,6 @@
 ////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Color Sort (Colorsort_CS.fx) by SirCobra
-// Version 0.6.0
+// Version 0.7.0
 // You can find info and all my shaders here: https://github.com/LordKobra/CobraFX
 //
 // --------Description---------
@@ -11,8 +11,10 @@
 //
 // ----------Credits-----------
 // Thanks to kingeric1992 & Lord of Lunacy for tips on how to construct the algorithm. :)
-// The merge_sort function is adapted from this website: https://www.techiedelight.com/iterative-merge-sort-algorithm-bottom-up/
-// The multithreaded merge sort is constructed as described here: https://www.nvidia.in/docs/IO/67073/nvr-2008-001.pdf
+// The merge_sort function is adapted from this website: 
+// https://www.techiedelight.com/iterative-merge-sort-algorithm-bottom-up/
+// The multithreaded merge sort is constructed as described here: 
+// https://www.nvidia.in/docs/IO/67073/nvr-2008-001.pdf
 ////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 #include "Reshade.fxh"
@@ -32,9 +34,14 @@ namespace COBRA_XCOL
 
     // Defines
 
-    #define COBRA_XCOL_VERSION "0.6.0"
+    #define COBRA_XCOL_VERSION "0.7.0"
+
     #define COBRA_UTL_MODE 0
     #include ".\CobraUtility.fxh"
+
+    #if (COBRA_UTL_VERSION_NUMBER < 1030)
+        #error "CobraUtility.fxh outdated! Please update CobraFX!"
+    #endif
 
     #ifndef COLOR_HEIGHT
         #define COLOR_HEIGHT 12 // maybe needs multiple of 64 :/
@@ -112,7 +119,9 @@ namespace COBRA_XCOL
     uniform int UI_BufferEnd <
         ui_type     = "radio";
         ui_spacing  = 2;
-        ui_text     = " Preprocessor Options:\n * COLOR_HEIGHT (default value: 12) multiplied by 64 defines the resolution of the effect along the sorting axis. The value needs to be integer. Smaller values give performance at cost of visual fidelity. 8: Performance, 12: Default, 16: HD\n\n"
+        ui_text     = " Preprocessor Options:\n * COLOR_HEIGHT (default value: 12) multiplied by 64 defines the "
+                      "resolution of the effect along the sorting axis. The value needs to be integer. Smaller values "
+                      "give performance at cost of visual fidelity. 8: Performance, 12: Default, 16: HD\n\n"
                       " Shader Version: " COBRA_XCOL_VERSION;
         ui_label    = " ";
     > ;
@@ -129,7 +138,13 @@ namespace COBRA_XCOL
     {
         Width  = BUFFER_WIDTH;
         Height = COBRA_XCOL_HEIGHT;
+#if (BUFFER_COLOR_BIT_DEPTH == 8) // store things compressed
+        Format = RGBA8;
+#elif (BUFFER_COLOR_BIT_DEPTH == 10)
+        Format = RGB10A2;
+#else
         Format = RGBA16F;
+#endif
     };
 
     texture TEX_Noise < source = "uniform_noise.png";
@@ -144,28 +159,40 @@ namespace COBRA_XCOL
     {
         Width  = BUFFER_WIDTH;
         Height = COBRA_XCOL_HEIGHT;
-        Format = R16F;
+        Format = R8; // basically bool - safe even for RGB10A2
     };
 
     texture TEX_Background
     {
         Width  = BUFFER_WIDTH;
         Height = BUFFER_HEIGHT;
+#if (BUFFER_COLOR_BIT_DEPTH == 8) // @TODO Buffer color space macro
+        Format = RGBA8;
+#elif (BUFFER_COLOR_BIT_DEPTH == 10)
+        Format = RGB10A2;
+#else
         Format = RGBA16F;
+#endif
     };
 
     texture TEX_ColorSort
     {
         Width  = BUFFER_WIDTH;
         Height = COBRA_XCOL_HEIGHT;
+#if (BUFFER_COLOR_BIT_DEPTH == 8) // store things compressed
+        Format = RGBA8;
+#elif (BUFFER_COLOR_BIT_DEPTH == 10)
+        Format = RGB10A2;
+#else
         Format = RGBA16F;
+#endif
     };
 
     // Sampler
 
-    sampler2D SAM_HalfRes { Texture = TEX_HalfRes; };
+    sampler2D SAM_HalfRes    { Texture = TEX_HalfRes;    };
     sampler2D SAM_Background { Texture = TEX_Background; };
-    sampler2D SAM_ColorSort { Texture = TEX_ColorSort; };
+    sampler2D SAM_ColorSort  { Texture = TEX_ColorSort;  };
 
     sampler2D SAM_Noise
     {
@@ -210,15 +237,17 @@ namespace COBRA_XCOL
         uint ANGLE     = UI_RotationAngle;
         float2 rotated = texcoord;
         // easy cases to avoid dividing by zero; values 0 & 360 are trivial
-        rotated = (ANGLE == 90) ? float2(texcoord.y, texcoord.x) : rotated;
-        rotated = (ANGLE == 180) ? float2(1 - texcoord.x, 1 - texcoord.y) : rotated;
-        rotated = (ANGLE == 270) ? float2(1 - texcoord.y, 1 - texcoord.x) : rotated;
+        rotated = (ANGLE == 90)  ? float2(texcoord.y, texcoord.x) : rotated;
+        rotated = (ANGLE == 180) ? float2(1.0 - texcoord.x, 1.0 - texcoord.y) : rotated;
+        rotated = (ANGLE == 270) ? float2(1.0 - texcoord.y, 1.0 - texcoord.x) : rotated;
 
         // harder cases
         if (!((ANGLE) % 90 == 0))
         {
-            // neccessary transformations from picture coordinates to normal coordinate system for better visualization of the concept
-            ANGLE           = fmod(ANGLE + 180, 360); // we only need to rotate the angle, because although texcoord is inverted applying it twice fixes it.
+            // neccessary transformations from picture coordinates to normal coordinate
+            // system for better visualization of the concept
+            ANGLE           = fmod(ANGLE + 180, 360); // we only need to rotate the angle, because although
+                                                      // texcoord is inverted applying it twice fixes it.
             const float PHI = ANGLE * M_PI / 180.0;
 
             // rotate the borders
@@ -243,11 +272,12 @@ namespace COBRA_XCOL
             //  0-1 0-2 1-3 2-3
             float4 x_rel     = abs(X.xxyz - current.xxxx) / abs(X.xxyz - X.yzww);
             float4 y_abs     = (1.0 - x_rel) * Y.xxyz + x_rel * Y.yzww;
-            uint4 in_between = (X.xxyz < current.xxxx && current.xxxx < X.yzww) || (X.xxyz > current.xxxx && current.xxxx > X.yzww);
+            uint4 in_between =    (X.xxyz < current.xxxx && current.xxxx < X.yzww) 
+                               || (X.xxyz > current.xxxx && current.xxxx > X.yzww);
             float3 ylow      = 1000.0;
             float3 yhigh     = -1000.0;
-            float4 pre_ylow  = y_abs * in_between + 1000 * (1 - in_between);
-            float4 pre_yhigh = y_abs * in_between - 1000 * (1 - in_between);
+            float4 pre_ylow  = y_abs * in_between + 1000.0 * (1.0 - in_between);
+            float4 pre_yhigh = y_abs * in_between - 1000.0 * (1.0 - in_between);
             ylow.z           = min(min(pre_ylow.x, pre_ylow.y), min(pre_ylow.z, pre_ylow.w));
             yhigh.z          = max(max(pre_yhigh.x, pre_yhigh.y), max(pre_yhigh.z, pre_yhigh.w));
             float4 pre_x     = float4(0.0, x_rel.y, x_rel.z, 1.0);
@@ -258,7 +288,9 @@ namespace COBRA_XCOL
             yhigh.y          = dot((yhigh.z == pre_yhigh) * pre_y, 1.0);
 
             // interpolate and check revert
-            rotated = revert ? float2(current_x_rel, abs(yhigh.z - current.y) / abs(ylow.z - yhigh.z)) : (1.0 - texcoord.y) * yhigh.xy + texcoord.y * ylow.xy; // find the y position on the original grid : find the y position on the rotated grid
+            rotated = revert ? float2(current_x_rel, abs(yhigh.z - current.y) / abs(ylow.z - yhigh.z)) 
+                             : (1.0 - texcoord.y) * yhigh.xy + texcoord.y * ylow.xy; // find the y position on the
+                                                            // original grid : find the y position on the rotated grid
         }
 
         return rotated;
@@ -334,6 +366,7 @@ namespace COBRA_XCOL
 
         // focus
         float3 color      = tex2D(ReShade::BackBuffer, texcoord).rgb;
+        color             = enc_to_lin(color);
         float scene_depth = ReShade::GetLinearizedDepth(texcoord);
         bool in_focus     = check_focus(color, scene_depth, texcoord);
 
@@ -349,13 +382,14 @@ namespace COBRA_XCOL
         {
             int2 prev_coords   = int2(floor(texcoord * float2(BUFFER_WIDTH, BUFFER_HEIGHT))) - int2(0, 1);
             float3 color2      = tex2Dfetch(ReShade::BackBuffer, prev_coords).rgb;
+            color2             = enc_to_lin(color2);
             float scene_depth2 = ReShade::GetLinearizedDepth(prev_coords / float2(BUFFER_WIDTH, BUFFER_HEIGHT));
             was_focus          = check_focus(color2, scene_depth2, prev_coords / float2(BUFFER_WIDTH, BUFFER_HEIGHT));
         }
 
         // noise separator
         const uint HS_WIDTH = UI_HotsamplingMode ? 2036 : BUFFER_WIDTH;
-        const float PHI     = UI_RotationAngle * M_PI / 180;
+        const float PHI     = UI_RotationAngle * M_PI / 180.0;
         float2 PHISC;
         sincos(PHI, PHISC.x, PHISC.y);
         const float4 XCOLWH_NWH = float4(HS_WIDTH, COBRA_XCOL_HEIGHT, COBRA_XCOL_NOISE_WIDTH, COBRA_XCOL_NOISE_HEIGHT);
@@ -365,7 +399,7 @@ namespace COBRA_XCOL
         float noise             = tex2D(SAM_Noise, t_noise).r; // add some point-color
 
         bool one = (1 - UI_MaskingNoise < noise) || (!was_focus);
-        fragment = one;
+        fragment = one; // basically bool return value
     }
 
     void PS_SaveBackground(float4 vpos : SV_Position, float2 texcoord : TEXCOORD, out float4 fragment : SV_Target)
@@ -379,7 +413,8 @@ namespace COBRA_XCOL
     {
         // prepare and rotate texture for sorting
         float2 texcoord_new = rotate(texcoord, false);
-        fragment            = tex2D(ReShade::BackBuffer, texcoord_new);
+        fragment            = tex2D(ReShade::BackBuffer, texcoord_new); // @TODO gamma encoded bicubic happening here?
+        // fragment.rgb        = enc_to_lin(fragment.rgb); // @TODO the value needs to be normalized for sorting
         float mask          = tex2D(SAM_Mask, texcoord_new).r;
         fragment.a          = mask;
     }
@@ -397,8 +432,13 @@ namespace COBRA_XCOL
         {
             // 11 bit interval 10 bit brightness, 11 bit position
             float4 value         = tex2Dfetch(SAM_HalfRes, int2(id.x, i + row));
-            uint interval        = value.a * 2047;          // 11 bit
-            uint brightness      = dot(value.rgb * 340, 1); // 10 bit
+        #if COBRA_UTL_CSP_SRGB // store PQ, HLG because 10 bit limit
+            value.rgb            = enc_to_lin(value.rgb);// * (COBRA_UTL_SDR_WHITEPOINT / COBRA_UTL_MAXCLL);
+        #elif COBRA_UTL_CSP_SCRGB // scRGB needs normalization @BlendOp
+            value.rgb            = enc_to_lin(value.rgb) * (COBRA_UTL_SDR_WHITEPOINT / COBRA_UTL_MAXCLL);
+        #endif
+            uint interval        = value.a;         // 11 bit (0 - 2047)
+            uint brightness      = csp_to_luminance(value.rgb) * 1023.0; // 10 bit
             brightness           = brightness + (1023 - 2 * brightness) * UI_ReverseSort;
             uint position        = i + row; // 11 bit
             color_table[i + row] = (interval << 21u) | (brightness << 11u) | position;
@@ -413,7 +453,7 @@ namespace COBRA_XCOL
             {
                 // 0.0: zero
                 // 1.0: one
-                float focus_val = (color_table[i] >> 21u) / 2047.0;
+                float focus_val = (color_table[i] >> 21u);
                 bool one        = focus_val > 0.5;
                 mask_val       += one;
                 uint final_val  = (2047 - mask_val);
@@ -591,6 +631,7 @@ namespace COBRA_XCOL
         {
             uint y       = row + i;
             float4 color = tex2Dfetch(SAM_HalfRes, int2(id.x, color_table[y] & 2047));
+            //color.rgb    = enc_to_lin(color.rgb);
             tex2Dstore(STOR_ColorSort, float2(id.x, row + i), color);
         }
     }
@@ -600,10 +641,14 @@ namespace COBRA_XCOL
     {
         float2 texcoord_new  = rotate(texcoord, true);
         fragment             = tex2D(SAM_Background, texcoord);
+        fragment.rgb         = enc_to_lin(fragment.rgb);
         float fragment_depth = ReShade::GetLinearizedDepth(texcoord);
-        fragment             = check_focus(fragment.rgb, fragment_depth, texcoord) ? tex2D(SAM_ColorSort, texcoord_new) : fragment;
-        fragment.rgb         = UI_ShowMask ? 1.0 - tex2D(SAM_Mask, texcoord).rrr : fragment.rgb;
-        fragment             = (UI_ShowSelectedHue * UI_FilterColor) ? show_hue(texcoord, fragment) : fragment;
+        float4 sorted        = tex2D(SAM_ColorSort, texcoord_new);
+        sorted.rgb           = enc_to_lin(sorted.rgb);
+        fragment             = check_focus(fragment.rgb, fragment_depth, texcoord) ? sorted : fragment;
+        fragment.rgb         = UI_ShowMask ? 1.0 - tex2D(SAM_Mask, texcoord).rrr : fragment.rgb; // @BlendOp
+        fragment.rgb         = (UI_ShowSelectedHue * UI_FilterColor) ? show_hue(texcoord, fragment.rgb) : fragment.rgb;
+        fragment.rgb         = lin_to_enc(fragment.rgb);
     }
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////

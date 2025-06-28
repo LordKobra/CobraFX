@@ -1,6 +1,6 @@
 /////////////////////////////////////////////////////////
 // Long Exposure (LongExposure.fx) by SirCobra
-// Version 0.1.1
+// Version 0.2.0
 // You can find info and all my shaders here: https://github.com/LordKobra/CobraFX
 //
 // --------Description---------
@@ -23,19 +23,26 @@
 ////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 // Shader Start
-// Defines
 
-#ifndef M_PI
-	#define M_PI 3.1415927
-#endif
 
 // Includes
 #include "Reshade.fxh"
+
 
 // Namespace Everything!
 
 namespace COBRA_LE
 {
+    // Defines
+
+    #define COBRA_LE_VERSION "0.2.0"
+    #define COBRA_UTL_MODE 0
+    #include ".\CobraUtility.fxh"
+
+    #if (COBRA_UTL_VERSION_NUMBER < 1030)
+        #error "CobraUtility.fxh outdated! Please update CobraFX!"
+    #endif
+
     // UI
 
     uniform float UI_ExposureDuration <
@@ -135,29 +142,39 @@ namespace COBRA_LE
     //
     ////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-    float4 mix_color(float4 b, float4 o, float4 s) // base, original, sample
+    #define COBRA_UTL_MODE 2
+    #include ".\CobraUtility.fxh"
+
+    float4 mix_color(float4 b, float4 o, float4 s) // base, original, sample // @BlendOp
     {
-        const float E2 = sqrt(saturate(1 - (UI_ExposureDuration - 1) * (UI_ExposureDuration - 1))); // saturate(tan(1.471*(ExposureDuration - 1)) / 10 + 1);
+        // saturate(tan(1.471*(ExposureDuration - 1)) / 10 + 1);
+        const float E2 = sqrt(saturate(1 - (UI_ExposureDuration - 1) * (UI_ExposureDuration - 1))); 
         float4 output_color;
         if (UI_ByBrightness)
         {
-            output_color.rgb = (dot(o.rgb,1) < dot(s.rgb,1)) ? o.rgb + UI_Intensity * abs(s.rgb - o.rgb) : o.rgb - (1/ UI_Precision * (1 - E2)) * abs(s.rgb-o.rgb);
+            output_color.rgb = (dot(o.rgb, 1.0) < dot(s.rgb, 1.0)) ? o.rgb + UI_Intensity * abs(s.rgb - o.rgb) 
+                                : o.rgb - (1.0 / UI_Precision * (1.0 - E2)) * abs(s.rgb-o.rgb);
         }
         else
         {
-            if (UI_Freeze) // base.r check diff originalColor sampleColor to r d(base,sample) d(base, original) if d_bs < d_bo, keep, else increase by d_bo+q*(d_bs-d_bo or fixed)
+            // base.r check diff originalColor sampleColor to r d(base,sample) d(base, original) 
+            // if d_bs < d_bo, keep, else increase by d_bo+q*(d_bs-d_bo or fixed)
+            if (UI_Freeze) 
             {
                 float d_bs = abs(b.r - s.r) + abs(b.g - s.g) + abs(b.b - s.b);
                 // application
-                output_color.rgb = o.rgb + (s.rgb-o.rgb) * UI_Intensity * saturate(d_bs / 3 - UI_FreezeThreshold);
+                output_color.rgb = o.rgb + (s.rgb-o.rgb) * UI_Intensity * saturate(d_bs / 3.0 - UI_FreezeThreshold);
                 // degradation
-                output_color.rgb -=(output_color.rgb - b.rgb) * (1 / UI_Precision * (1 - E2));
+                output_color.rgb -=(output_color.rgb - b.rgb) * (1.0 / UI_Precision * (1.0 - E2));
             }
             else
             {
-                output_color.r = (o.r < s.r) ? o.r + (1 / UI_Precision * (1 - E2)) * abs(s.r - o.r) : o.r - (1 / UI_Precision * (1 - E2)) * abs(s.r - o.r);
-                output_color.g = (o.g < s.g) ? o.g + (1 / UI_Precision * (1 - E2)) * abs(s.g - o.g) : o.g - (1 / UI_Precision * (1 - E2)) * abs(s.g - o.g);
-                output_color.b = (o.b < s.b) ? o.b + (1 / UI_Precision * (1 - E2)) * abs(s.b - o.b) : o.b - (1 / UI_Precision * (1 - E2)) * abs(s.b - o.b);
+                output_color.r = (o.r < s.r) ? o.r + (1.0 / UI_Precision * (1.0 - E2)) * abs(s.r - o.r) 
+                : o.r - (1.0 / UI_Precision * (1.0 - E2)) * abs(s.r - o.r);
+                output_color.g = (o.g < s.g) ? o.g + (1.0 / UI_Precision * (1.0 - E2)) * abs(s.g - o.g) 
+                : o.g - (1.0 / UI_Precision * (1.0 - E2)) * abs(s.g - o.g);
+                output_color.b = (o.b < s.b) ? o.b + (1.0 / UI_Precision * (1.0 - E2)) * abs(s.b - o.b) 
+                : o.b - (1.0 / UI_Precision * (1.0 - E2)) * abs(s.b - o.b);
             }
         }
         output_color.a = 1.0;
@@ -173,10 +190,11 @@ namespace COBRA_LE
     void PS_LongExposure(float4 vpos : SV_Position, float2 texcoord : TEXCOORD, out float4 fragment : SV_Target)
     {
         float4 sample_color  = tex2D(ReShade::BackBuffer, texcoord);
+        sample_color.rgb     = enc_to_lin(sample_color.rgb);
         float4 current_color = tex2D(SAM_ExposureCopy, texcoord);
         float4 base_color    = tex2D(SAM_Freeze, texcoord);
-        current_color        = mix_color(base_color, current_color, sample_color);
-        fragment            = current_color;
+        base_color.rgb       = enc_to_lin(base_color.rgb);
+        fragment             = mix_color(base_color, current_color, sample_color); // linear
     }
     
     void PS_CopyExposure(float4 vpos : SV_Position, float2 texcoord : TEXCOORD, out float4 fragment : SV_Target)
@@ -197,6 +215,8 @@ namespace COBRA_LE
     void PS_DownsampleColor(float4 vpos : SV_Position, float2 texcoord : TEXCOORD, out float4 fragment : SV_Target)
     {
         fragment = tex2D(SAM_Exposure, texcoord);
+        fragment.rgb = lin_to_enc(fragment.rgb);
+        fragment.a = tex2D(ReShade::BackBuffer, texcoord).a;
     }
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -217,7 +237,7 @@ namespace COBRA_LE
                        "image and not move the camera. It will give the shader an expectation of the original image,\n"
                        "so it can better keep track of changes.\n"
                        "Exposure duration and precision will let you decide how long the effect should stay.\n\n"
-                       "Version:    0.1.1\nAuthor:     SirCobra\nCollection: CobraFX\n"
+                      "Version:    " COBRA_LE_VERSION "\nAuthor:     SirCobra\nCollection: CobraFX\n"
                        "            https://github.com/LordKobra/CobraFX";
     >
     {

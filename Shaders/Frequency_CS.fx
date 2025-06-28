@@ -1,6 +1,6 @@
 ////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Frequency (Frquency_CS.fx) by SirCobra
-// Version 0.1.1
+// Version 0.2.0
 // You can find info and all my shaders here: https://github.com/LordKobra/CobraFX
 //
 // --------Description---------
@@ -14,7 +14,7 @@
 // Thanks to...
 // ... TeoTave for introducing me to this effect!
 // ... https://dominik.ws/art/movingdots/ for showcasing a concrete example on how the effect can look!
-// ... Marty McFly, Lord of Lunacy and CeeJayDK for technical discussions.
+// ... Marty McFly, Lord of Lunacy and CeeJayDK for technical discussions!
 ////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 #include "Reshade.fxh"
@@ -38,9 +38,14 @@ namespace COBRA_XFRQ
 
     // Defines
 
-    #define COBRA_XFRQ_VERSION "0.1.1"
+    #define COBRA_XFRQ_VERSION "0.2.0"
+
     #define COBRA_UTL_MODE 0
     #include ".\CobraUtility.fxh"
+
+    #if (COBRA_UTL_VERSION_NUMBER < 1030)
+        #error "CobraUtility.fxh outdated! Please update CobraFX!"
+    #endif
 
     #define COBRA_XFRQ_THREADS 16
     #define COBRA_XFRQ_THREAD_WIDTH 16
@@ -51,12 +56,10 @@ namespace COBRA_XFRQ
         #define COBRA_XFRQ_COMPUTE 1
     #else
         #define COBRA_XFRQ_COMPUTE 0
-        #warning "Frequency.fx does only work with ReShade 4.8 or newer, DirectX 11 or newer, OpenGL 4.3 or newer and Vulkan."
+        #warning "Frequency_CS.fx does only work with ReShade 4.8 or newer, DirectX 11 or newer, OpenGL 4.3 or newer and Vulkan."
     #endif
 
     #if COBRA_XFRQ_COMPUTE != 0
-
-    // Includes
 
     // UI
 
@@ -89,10 +92,10 @@ namespace COBRA_XFRQ
         ui_min       = 0.4;
         ui_max       = 4.4;
         ui_step      = 0.01;
-        ui_tooltip   = "The gamma correction value. The default value is 1. The higher this value, the more persistent\n"
-                       "highlights will be.";
+        ui_tooltip   = "The gamma correction value. The default value is 1.0. The higher this value, the more\n"
+                       "persistent highlights will be.";
         ui_category  = COBRA_UTL_UI_GENERAL;
-    >                = 1.5;
+    >                = 1.0;
 
     uniform float UI_BaseIncrease <
         ui_label     = " Base Increase";
@@ -102,7 +105,7 @@ namespace COBRA_XFRQ
         ui_step      = 0.01;
         ui_tooltip   = "This value is added to every pixel to create a base frequency independent of the image.";
         ui_category  = COBRA_UTL_UI_GENERAL;
-    >                = 0.150;
+    >                = 0.15;
 
     uniform bool UI_BaseMultiply <
         ui_label     = " Multiply Base with Background";
@@ -232,14 +235,14 @@ namespace COBRA_XFRQ
     {
         Width  = BUFFER_WIDTH;
         Height = BUFFER_HEIGHT;
-        Format = R8;
+        Format = R8; // quasi-bool
     };
 
     texture TEX_Mask
     {
         Width  = BUFFER_WIDTH;
         Height = BUFFER_HEIGHT;
-        Format = R16F;
+        Format = R16F; // linear luminance
     };
 
     // Sampler
@@ -285,17 +288,6 @@ namespace COBRA_XFRQ
     //
     ////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-    void VS_Clear(in uint id : SV_VertexID, out float4 position : SV_Position)
-    {
-        position = -3.0;
-    }
-
-    void PS_Clear(float4 position : SV_Position, out float4 fragment : SV_TARGET0)
-    {
-        fragment = 0.0;
-        discard;
-    }
-
     void PS_Mask(float4 vpos : SV_Position, out float fragment : SV_TARGET)
     {
         float val    = 0.0;
@@ -306,12 +298,14 @@ namespace COBRA_XFRQ
             {
                 float2 texcoord = (vpos.xy + int2(0, i)) / float2(BUFFER_WIDTH, BUFFER_HEIGHT);
                 texcoord        = rotate(texcoord, false);
-                float3 rgb      = tex2D(ReShade::BackBuffer, texcoord).rgb;
+                float3 srgb     = tex2D(ReShade::BackBuffer, texcoord).rgb; //@BlendOp ? bicubic interpolation?
+                float3 rgb      = enc_to_lin(srgb);
                 float depth     = ReShade::GetLinearizedDepth(texcoord);
                 float f         = check_focus(rgb, depth, texcoord);
                 if (f)
                 {
-                    val += UI_UseDepth ? f * UI_DepthMultiplier * pow(abs(depth), UI_Gamma) : f * dot(pow(abs(rgb), UI_Gamma), 1.0);
+                    val += UI_UseDepth ? f * UI_DepthMultiplier * pow(abs(depth), UI_Gamma) 
+                                       : f * csp_to_luminance(pow(abs(rgb), UI_Gamma));
                     counter++;
                 }
             }
@@ -359,8 +353,10 @@ namespace COBRA_XFRQ
             }
         }
 
-        // 3) calculate modulos: if decay==0 by modulo in local array, if decay > 0 by subtracting iterations from total value until in cell.
-        //    Also shade areas and write overlap to thread array (forward or backward reading? probably forward with atomicAdd) -> forward add
+        // 3) calculate modulos: if decay==0 by modulo in local array, if decay > 0 by subtracting iterations from
+        //     total value until in cell.
+        //    Also shade areas and write overlap to thread array (forward or backward reading?
+        //    probably forward with atomicAdd) -> forward add
         float decay         = 1.0;
         uint remaining      = 0;
         uint first_position = end;
@@ -389,7 +385,8 @@ namespace COBRA_XFRQ
                 n = ceil(accumfd)
                 accum - UI_Frequency*n
             */
-            //float accumfd = uint(accum_l) / UI_Frequency; // @TODO for some reason i need uint conversion and additional while pass
+            //float accumfd = uint(accum_l) / UI_Frequency; // @TODO for some reason i need uint conversion
+                                                            // and additional while pass
             /* if (!(U > 1.0)) // always produces rounding issues past initial thread.
             {
                 uint n = ROUNDUP(uint(accum_l), UI_Frequency);
@@ -445,7 +442,7 @@ namespace COBRA_XFRQ
                 if (remaining > 0)
                 {
                     remaining--;
-                    tex2Dstore(STOR_Frequency, int2(i, id.y), 1.0); // TODO coords
+                    tex2Dstore(STOR_Frequency, int2(i, id.y), 1.0); // @TODO coords
                 }
             }
         }
@@ -454,16 +451,18 @@ namespace COBRA_XFRQ
     // reproject to output window
     void PS_PrintFrequency(float4 vpos : SV_Position, float2 texcoord : TEXCOORD, out float4 fragment : SV_Target)
     {
-        float3 value        = tex2Dfetch(ReShade::BackBuffer, floor(vpos.xy)).rgb;
-        float3 intermediate = UI_BlendMode == 2 ? dot(value.rgb, 1.0) / 3.0 : value;
-        intermediate        = UI_BlendMode == 0 ? UI_EffectTint : intermediate;
+        float4 srgb         = tex2Dfetch(ReShade::BackBuffer, floor(vpos.xy));
+        float3 rgb          = enc_to_lin(srgb.rgb);
+        float3 intermediate = UI_BlendMode == 2 ? csp_to_luminance(rgb.rgb) : rgb;
+        intermediate        = UI_BlendMode == 0 ? ui_to_csp(UI_EffectTint) : intermediate; //@BlendOp
         float2 texcoord_new = rotate(texcoord, true);
         float intensity     = tex2D(SAM_Frequency, texcoord_new).r;
         intensity           = intensity + (1.0 - 2.0 * intensity) * UI_Invert;
-        fragment.rgb        = intensity * intermediate + (1.0 - intensity) * value * UI_Transparency / 100.0;
-        fragment.a          = 1.0;
-        fragment.rgb        = UI_ShowMask ? 1.0 - tex2D(SAM_Mask, texcoord_new).rrr : fragment.rgb;
-        fragment            = (UI_ShowSelectedHue * UI_FilterColor) ? show_hue(texcoord, fragment) : fragment;
+        fragment.rgb        = intensity * intermediate + (1.0 - intensity) * rgb * UI_Transparency / 100.0;
+        fragment.rgb        = UI_ShowMask ? saturate(1.0 - tex2D(SAM_Mask, texcoord_new).rrr) : fragment.rgb; //@BlendOp
+        fragment.rgb        = (UI_ShowSelectedHue * UI_FilterColor) ? show_hue(texcoord, fragment.rgb) : fragment.rgb;
+        fragment.rgb        = lin_to_enc(fragment.rgb);
+        fragment.a          = srgb.a; // preserve alpha
     }
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////

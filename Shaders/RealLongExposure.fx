@@ -1,6 +1,6 @@
 ////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Realistic Long-Exposure (RealLongExposure.fx) by SirCobra
-// Version 0.5.4
+// Version 0.6.0
 // You can find info and all my shaders here: https://github.com/LordKobra/CobraFX
 //
 // --------Description---------
@@ -32,10 +32,14 @@ namespace COBRA_RLE
     ////////////////////////////////////////////////////////////////////////////////////////////////////////
 
     // Defines
-    #define COBRA_RLE_VERSION "0.5.4"
+    #define COBRA_RLE_VERSION "0.6.0"
 
     #define COBRA_UTL_MODE 0
     #include ".\CobraUtility.fxh"
+    
+    #if (COBRA_UTL_VERSION_NUMBER < 1030)
+        #error "CobraUtility.fxh outdated! Please update CobraFX!"
+    #endif
 
     #define COBRA_RLE_TIME_MAX 16777216 // 2^24 because of 23 bit fraction plus 'implicit leading bit'
 
@@ -63,7 +67,8 @@ namespace COBRA_RLE
 
     uniform bool UI_StartExposure <
         ui_label     = " Start Exposure";
-        ui_tooltip   = "Click to start the exposure process. It will run for the given amount of seconds and then freeze.\n"
+        ui_tooltip   = "Click to start the exposure process. It will run for the given amount of seconds and then "
+                       "freeze.\n"
                        "TIP: Bind this to a hotkey for convenient usage (right-click the button).";
         ui_category  = COBRA_UTL_UI_GENERAL;
     >                = false;
@@ -76,9 +81,19 @@ namespace COBRA_RLE
 
     uniform bool UI_ShowGreenOnFinish <
         ui_label     = " Show Green Dot On Finish";
-        ui_tooltip   = "Display a green dot at the top to signalize the exposure has finished and entered preview mode.";
+        ui_tooltip   = "Display a green dot at the top to signalize the exposure has finished and entered preview "
+                       "mode.";
         ui_category  = COBRA_UTL_UI_GENERAL;
     >                = false;
+
+#if COBRA_UTL_CSP_SRGB
+    uniform bool UI_Dither <
+        ui_label     = " Dither output";
+        ui_tooltip   = "Apply dither to the accumulation texture, to avoid banding artifacts.\n"
+                       "Recommended!";
+        ui_category  = COBRA_UTL_UI_GENERAL;
+    >                = true;
+#endif
 
     uniform float UI_ISO <
         ui_label     = " ISO";
@@ -91,13 +106,13 @@ namespace COBRA_RLE
     >                = 100.0;
 
     uniform float UI_Gamma <
-        ui_label     = " Gamma";
+        ui_label     = " Highlight Boost";
         ui_type      = "slider";
         ui_min       = 0.4;
         ui_max       = 4.4;
         ui_step      = 0.01;
-        ui_tooltip   = "The gamma correction value. The default value is 1. The higher this value, the more persistent\n"
-                       "highlights will be.";
+        ui_tooltip   = "The gamma correction value. The higher this value, the more persistent highlights\n"
+                       "will be. The default value is 1.";
         ui_category  = COBRA_UTL_UI_GENERAL;
     >                = 1.0;
 
@@ -131,7 +146,7 @@ namespace COBRA_RLE
     {
         Width  = BUFFER_WIDTH;
         Height = BUFFER_HEIGHT;
-        Format = RGBA32F;
+        Format = RGBA32F; // linear
     };
 
     texture TEX_Timer
@@ -222,34 +237,38 @@ namespace COBRA_RLE
     #include ".\CobraUtility.fxh"
 
     // return the exposure weight of a single frame
-    float4 get_exposure(float4 value)
+    float3 get_exposure(float3 value)
     {
         float iso_norm = UI_ISO * 0.01;
-        value.rgb      = iso_norm * pow(abs(value.rgb), UI_Gamma);
+        value      = iso_norm * pow(abs(value), UI_Gamma);
         return value;
     }
 
-    float4 show_progress(float2 texcoord, float4 fragment, float progress)
+    float3 show_progress(float2 texcoord, float3 fragment, float progress)
     {
+        fragment          = enc_to_lin(fragment); // @TODO maybe a little much encoding + decoding again
         const float2 POS  = float2(0.5, 0.07);
         const float RANGE = 0.05;
         const float2 AR   = float2(BUFFER_ASPECT_RATIO, 1.0);
         float2 tx         = (texcoord - POS) * AR;
-        float angle       = (atan2_approx(tx.x, tx.y) + M_PI) / (2 * M_PI);
-        float intensity   = (sqrt(dot(abs(tx), abs(tx))) - RANGE) * 100;
-        intensity         = progress > 1.0 ? (1 - saturate(intensity)) * UI_ShowGreenOnFinish : (1 - abs(intensity)) * UI_ShowProgress;
+        float angle       = (atan2_approx(tx.x, tx.y) + M_PI) / (2.0 * M_PI);
+        float intensity   = (sqrt(dot(abs(tx), abs(tx))) - RANGE) * 100.0;
+        intensity         = progress > 1.0 ? (1.0 - saturate(intensity)) * UI_ShowGreenOnFinish 
+                                           : (1.0 - abs(intensity)) * UI_ShowProgress;
+        const float3 background_col = ui_to_csp(float3(0.0, 0.0, 0.0));
+        const float3 load_col       = ui_to_csp(float3(0.5, 1.0, 0.5));
         if (intensity > 0.0 && intensity <= 1.0 && progress < 1.0)
         {
-            fragment = lerp(fragment, float4(0.0, 0.0, 0.0, 1.0), 0.65 * saturate(intensity * 4));
+            fragment = lerp(fragment, background_col, 0.65 * saturate(intensity * 4.0)); // @BlendOp
         }
 
         intensity = intensity * 0.7;
         if (intensity > 0.0 && intensity <= 1.0 && progress > angle)
         {
-            fragment = lerp(fragment, float4(0.3, 0.7, 0.3, 1.0), saturate(intensity * 4));
+            fragment.rgb = lerp(fragment, load_col, saturate(intensity * 4.0)); // @BlendOp
         }
 
-        return fragment;
+        return lin_to_enc(fragment);
     }
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -263,11 +282,13 @@ namespace COBRA_RLE
     vs2ps VS_LongExposure(uint id : SV_VertexID)
     {
         float2 timer_values = tex2Dfetch(SAM_Timer, int2(0, 0)).rg;
-        float current_time  = timer % COBRA_RLE_TIME_MAX; // @TODO timer now and during framecount pass can differ -> untracked frame possible
+        float current_time  = timer % COBRA_RLE_TIME_MAX; // @TODO timer now and during framecount pass can differ 
+                                                          // -> untracked frame possible
         vs2ps o             = vs_basic(id, timer_values);
         // during exposure: active -> add rgb, inactive -> keep current and skip PS
-        if (!(UI_StartExposure && abs(current_time - timer_values.x) > UI_Delay) || (abs(current_time - timer_values.x) >= 1000 * UI_ExposureDuration))
-            o.vpos.xy = 0.0;
+        if (!(UI_StartExposure && abs(current_time - timer_values.x) > UI_Delay) 
+                    || (abs(current_time - timer_values.x) >= 1000.0 * UI_ExposureDuration))
+            {   o.vpos.xy = 0.0; }
         return o;
     }
 
@@ -276,8 +297,8 @@ namespace COBRA_RLE
         float2 timer_values = o.uv.zw;
         float current_time  = timer % COBRA_RLE_TIME_MAX;
         fragment.rgb        = tex2Dfetch(ReShade::BackBuffer, floor(o.vpos.xy)).rgb;
-        fragment.a          = 1;
-        fragment            = get_exposure(fragment);
+        fragment.rgb        = enc_to_lin(fragment.rgb);
+        fragment.rgb        = get_exposure(fragment.rgb);
         // at beginning: reset so it is ready for activation
         fragment.a    = timer_values.y < 0.5 ? 1.0 : 0.0;
         fragment.rgb += timer_values.y < 0.5 ? 0.0 : tex2Dfetch(SAM_ExposureCopy, floor(o.vpos.xy)).rgb;
@@ -308,7 +329,8 @@ namespace COBRA_RLE
         }
 
         fragment.x = timer_values.x;
-        if ((abs(current_time - timer_values.x) < 1000.0 * UI_ExposureDuration) && (abs(current_time - timer_values.x) > UI_Delay) && UI_StartExposure)
+        if ((abs(current_time - timer_values.x) < 1000.0 * UI_ExposureDuration) 
+             && (abs(current_time - timer_values.x) > UI_Delay) && UI_StartExposure)
         {
             fragment.y = timer_values.y + 1.0;
         }
@@ -333,7 +355,8 @@ namespace COBRA_RLE
         {
             timer_value[0].xy = tex2Dfetch(STOR_Timer, int2(0, 0)).xy;
             timer_value[0].z  = timer % COBRA_RLE_TIME_MAX;
-            timer_value[0].w  = (UI_StartExposure && (abs(timer_value[0].z - timer_value[0].x) > UI_Delay) && (abs(timer_value[0].z - timer_value[0].x) < 1000.0 * UI_ExposureDuration));
+            timer_value[0].w  = (UI_StartExposure && (abs(timer_value[0].z - timer_value[0].x) > UI_Delay) 
+                                  && (abs(timer_value[0].z - timer_value[0].x) < 1000.0 * UI_ExposureDuration));
             uint passes = atomicAdd(STOR_SyncCount, int2(0, 0), 1u);
             if (passes == ROUNDUP(BUFFER_WIDTH, COBRA_RLE_TSIZE) * ROUNDUP(BUFFER_HEIGHT, COBRA_RLE_TSIZE) - 1)
             {
@@ -360,11 +383,12 @@ namespace COBRA_RLE
 
         float4 fragment = 1.0;
         fragment.rgb    = tex2Dfetch(ReShade::BackBuffer, id.xy).rgb;
-        fragment        = get_exposure(fragment);
+        fragment.rgb    = enc_to_lin(fragment.rgb);
+        fragment.rgb    = get_exposure(fragment.rgb);
         // at beginning: reset so it is ready for activation
 
         fragment.a = timer_value[0].y < 0.5;
-        fragment.rgb += (1 - fragment.a) * tex2Dfetch(STOR_Exposure, id.xy).rgb;
+        fragment.rgb += (1.0 - fragment.a) * tex2Dfetch(STOR_Exposure, id.xy).rgb;
 
         //barrier();
 
@@ -385,27 +409,34 @@ namespace COBRA_RLE
 
     void PS_DisplayExposure(vs2ps o, out float4 fragment : SV_Target)
     {
-        float4 exposure_rgb = tex2Dfetch(SAM_Exposure, int2(floor(o.vpos.xy)));
-        float4 game_rgb     = tex2Dfetch(ReShade::BackBuffer, int2(floor(o.vpos.xy)));
+        // sampling could be branched?
         float2 timer_values = o.uv.zw;
         float current_time  = timer % COBRA_RLE_TIME_MAX;
         fragment            = float4(0.0, 0.0, 0.0, 1.0);
+    
+        float4 exposure_rgb = tex2Dfetch(SAM_Exposure, int2(floor(o.vpos.xy)));
+        float4 game_rgb     = tex2Dfetch(ReShade::BackBuffer, int2(floor(o.vpos.xy)));
 
         if (UI_StartExposure && timer_values.y)
         {
             fragment.rgb = exposure_rgb.rgb / timer_values.y;
-            fragment.rgb = pow(abs(fragment.rgb), 1 / UI_Gamma);
+            fragment.rgb = pow(abs(fragment.rgb), 1.0 / UI_Gamma);
+#if COBRA_UTL_CSP_SRGB
+            fragment.rgb = UI_Dither ? dither_linear_to_encoding(fragment.rgb, o.vpos.xy) : lin_to_enc(fragment.rgb);
+#else
+            fragment.rgb = lin_to_enc(fragment.rgb);
+#endif
         }
         else
         {
-            fragment.rgb = game_rgb.rgb;
+            fragment.rgba    = game_rgb.rgba;
         }
 
-        if (!UI_StartExposure || !(UI_ShowProgress || UI_ShowGreenOnFinish))
-            return;
-
-        float progress = (current_time - timer_values.x) / (1000 * UI_ExposureDuration);
-        fragment.rgb   = show_progress(o.uv.xy, fragment, progress).rgb;
+        bool hide_progress = !UI_StartExposure || !(UI_ShowProgress || UI_ShowGreenOnFinish);
+        float progress     = (current_time - timer_values.x) / (1000.0 * UI_ExposureDuration);
+        fragment.rgb       = hide_progress 
+                             ? fragment.rgb 
+                             : show_progress(o.uv.xy, fragment.rgb, progress).rgb;
     }
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////

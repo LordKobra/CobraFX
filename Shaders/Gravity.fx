@@ -12,6 +12,7 @@
 // is 1920x1080, RGBA8 and has the same name. Only the red-intensity is taken. So either use red
 // images or greyscale images.
 // The effect is quite resource consuming. On large resolutions, check out Gravity_CS.fx instead.
+//
 // ----------Credits-----------
 // The effect can be applied to a specific area like a DoF shader. The basic methods for this were taken
 // with permission from https://github.com/FransBouma/OtisFX/blob/master/Shaders/Emphasize.fx
@@ -20,48 +21,49 @@
 // Thanks to FransBouma, Lord of Lunacy and Annihlator for advice on my first shader :)
 ////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-////////////////////////////////////////////////////////////////////////////////////////////////////////
-//
-//                                            Defines & UI
-//
-////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-// Defines
-
-#define COBRA_GRV_VERSION "0.2.2"
-#define COBRA_GRV_UI_GENERAL "\n / General Options /\n"
-#define COBRA_GRV_UI_DEPTH "\n /  Depth Options  /\n"
-#define COBRA_GRV_UI_COLOR "\n /  Color Options  /\n"
-
-#ifndef M_PI
-    #define M_PI 3.1415927
-#endif
-
-#define ENABLE_RED (1 << 0)
-#define ENABLE_GREEN (1 << 1)
-#define ENABLE_BLUE (1 << 2)
-#define ENABLE_ALPHA (1 << 3)
-
-// render targets don't work with dx9
-#if (__RENDERER__ >= 0xa000)
-    #define COBRA_GRV_COMPUTE 1
-#else
-    #define COBRA_GRV_COMPUTE 0
-    #warning "Gravity.fx does not work in DirectX 9 games."
-#endif
-
-// Includes
-
 #include "Reshade.fxh"
 
 // Shader Start
-
-#if COBRA_GRV_COMPUTE != 0
 
 // Namespace Everything!
 
 namespace COBRA_GRV
 {
+
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////
+    //
+    //                                            Defines & UI
+    //
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+    // Defines
+
+    #define COBRA_GRV_VERSION "0.2.2"
+    #define COBRA_GRV_UI_GENERAL "\n / General Options /\n"
+    #define COBRA_GRV_UI_DEPTH "\n /  Depth Options  /\n"
+    #define COBRA_GRV_UI_COLOR "\n /  Color Options  /\n"
+
+    #ifndef M_PI
+        #define M_PI 3.1415927
+    #endif
+
+    #define ENABLE_RED (1 << 0)
+    #define ENABLE_GREEN (1 << 1)
+    #define ENABLE_BLUE (1 << 2)
+    #define ENABLE_ALPHA (1 << 3)
+
+    // render targets don't work with dx9
+    #if (__RENDERER__ >= 0xa000)
+        #define COBRA_GRV_COMPUTE 1
+    #else
+        #define COBRA_GRV_COMPUTE 0
+        #warning "Gravity.fx does not work in DirectX 9 games."
+    #endif
+
+    #if COBRA_GRV_COMPUTE != 0
+
+    // Includes
+
     // UI
 
     uniform float UI_GravityIntensity <
@@ -87,7 +89,8 @@ namespace COBRA_GRV
 
     uniform bool UI_UseImage <
         ui_label     = " Use Image";
-        ui_tooltip   = "Changes the RNG to the input image called gravityrng.png located in the Textures folder.\nYou can change the image for your own RNG as long as the name and resolution stay the same.";
+        ui_tooltip   = "Changes the RNG to the input image called gravityrng.png located in the Textures folder.\n"
+                       "You can change the image for your own RNG as long as the name and resolution stay the same.";
         ui_category  = COBRA_GRV_UI_GENERAL;
     >                = false;
 
@@ -104,7 +107,8 @@ namespace COBRA_GRV
         ui_min       = 0.000;
         ui_max       = 1.000;
         ui_step      = 0.001;
-        ui_tooltip   = "Manual depth of the focus center. Ranges from 0.0, which means the camera position\nis the focus plane, till 1.0 which means the horizon is the focus plane.";
+        ui_tooltip   = "Manual depth of the focus center. Ranges from 0.0, which means the camera position\n"
+                       "is the focus plane, till 1.0 which means the horizon is the focus plane.";
         ui_category  = COBRA_GRV_UI_DEPTH;
     >                = 0.030;
 
@@ -123,7 +127,8 @@ namespace COBRA_GRV
         ui_type      = "slider";
         ui_min       = 0.000;
         ui_max       = 1.000;
-        ui_tooltip   = "The smoothness of the edge of the focus range. Range from 0.0, which means sudden\ntransition, till 1.0, which means the effect is smoothly fading towards camera and horizon.";
+        ui_tooltip   = "The smoothness of the edge of the focus range. Range from 0.0, which means sudden\n"
+                       "transition, till 1.0, which means the effect is smoothly fading towards camera and horizon.";
         ui_step      = 0.001;
         ui_category  = COBRA_GRV_UI_DEPTH;
     >                = 0.020;
@@ -140,7 +145,9 @@ namespace COBRA_GRV
         ui_min       = 1;
         ui_max       = 180;
         ui_units     = "°";
-        ui_tooltip   = "Specifies the estimated Field of View you are currently playing with. Range from 1,\nwhich means 1 Degree, till 180 which means 180 Degree (half the scene).\nNormal games tend to use values between 60 and 90.";
+        ui_tooltip   = "Specifies the estimated Field of View you are currently playing with. Range from 1,\n"
+                       "which means 1 Degree, till 180 which means 180 Degree (half the scene).\n"
+                       "Normal games tend to use values between 60 and 90.";
         ui_category  = COBRA_GRV_UI_DEPTH;
     >                = 75;
 
@@ -149,7 +156,8 @@ namespace COBRA_GRV
         ui_type      = "slider";
         ui_min       = 0.0;
         ui_max       = 1.0;
-        ui_tooltip   = "Specifies the location of the focuspoint on the horizontal axis. Range from 0, which\nmeans left screen border, till 1 which means right screen border.";
+        ui_tooltip   = "Specifies the location of the focuspoint on the horizontal axis. Range from 0, which\n"
+                       "means left screen border, till 1 which means right screen border.";
         ui_category  = COBRA_GRV_UI_DEPTH;
     >                = 0.5;
 
@@ -158,7 +166,8 @@ namespace COBRA_GRV
         ui_type      = "slider";
         ui_min       = 0.0;
         ui_max       = 1.0;
-        ui_tooltip   = "Specifies the location of the focuspoint on the vertical axis. Range from 0, which\nmeans upper screen border, till 1 which means bottom screen border.";
+        ui_tooltip   = "Specifies the location of the focuspoint on the vertical axis. Range from 0, which\n"
+                       "means upper screen border, till 1 which means bottom screen border.";
         ui_category  = COBRA_GRV_UI_DEPTH;
     >                = 0.5;
 
@@ -175,14 +184,16 @@ namespace COBRA_GRV
         ui_type      = "slider";
         ui_min       = 0.0;
         ui_max       = 1.0;
-        ui_tooltip   = "Specifies intensity of the tint applied to the gravitating pixels. Range from 0.0, which\nmeans no tint, till 1.0 which means fully tinted.";
+        ui_tooltip   = "Specifies intensity of the tint applied to the gravitating pixels. Range from 0.0, which\n"
+                       "means no tint, till 1.0 which means fully tinted.";
         ui_category  = COBRA_GRV_UI_COLOR;
     >                = 0.0;
 
     uniform float3 UI_FilterColor <
         ui_label     = " Filter Color";
         ui_type      = "color";
-        ui_tooltip   = "The target color of the color filter. The effect will only be applied to colors similar\nto this color.";
+        ui_tooltip   = "The target color of the color filter. The effect will only be applied to colors similar\n"
+                       "to this color.";
         ui_category  = COBRA_GRV_UI_COLOR;
     >                = float3(1.00, 0.0, 0.0);
 
@@ -191,7 +202,8 @@ namespace COBRA_GRV
         ui_type      = "slider";
         ui_min       = 0;
         ui_max       = 1.74;
-        ui_tooltip   = "The tolerance around the target color. Ranges from 0.0, which means no tolerance\nto 1.74, which tolerates every possible color.";
+        ui_tooltip   = "The tolerance around the target color. Ranges from 0.0, which means no tolerance\n"
+                       "to 1.74, which tolerates every possible color.";
         ui_category  = COBRA_GRV_UI_COLOR;
     >                = 1.74;
 
@@ -235,7 +247,7 @@ namespace COBRA_GRV
     {
         Width  = BUFFER_WIDTH;
         Height = BUFFER_HEIGHT;
-        Format = RGBA16F;
+        Format = RGBA16F; // @TODO is 16bit *always* required?
     };
 
     // Sampler
@@ -262,8 +274,10 @@ namespace COBRA_GRV
         texcoord.y                = (texcoord.y - UI_SphereFocusVertical) * ReShade::ScreenSize.y;
         const float DEG_PER_PIXEL = UI_SphereFieldOfView / ReShade::ScreenSize.x;
         float fov_diff            = sqrt((texcoord.x * texcoord.x) + (texcoord.y * texcoord.y)) * DEG_PER_PIXEL;
-        float depth_diff          = UI_Spherical ? sqrt((depth * depth) + (FOCUS * FOCUS) - (2 * depth * FOCUS * cos(fov_diff * (2 * M_PI / 360.0)))) : abs(depth - FOCUS);
-        float coc_val             = (1 - saturate((depth_diff > FULL_RANGE) ? 1.0 : smoothstep(UI_FocusRangeDepth, FULL_RANGE, depth_diff)));
+        float depth_diff          = UI_Spherical ? sqrt((depth * depth) + (FOCUS * FOCUS) 
+                                    - (2 * depth * FOCUS * cos(fov_diff * (2 * M_PI / 360.0)))) : abs(depth - FOCUS);
+        float coc_val             = (1 - saturate((depth_diff > FULL_RANGE) ? 1.0 
+                                     : smoothstep(UI_FocusRangeDepth, FULL_RANGE, depth_diff)));
         return ((distance(col_val.rgb, UI_FilterColor.rgb) < UI_FilterRange) ? coc_val : 0.0);
     }
 
@@ -271,7 +285,7 @@ namespace COBRA_GRV
     // inspired by http://nuclear.mutantstargoat.com/articles/sdr_fract/
     float mandelbrot_rng(float2 texcoord : TEXCOORD)
     {
-        const float2 CENTER = float2(0.675, 0.46);                           // an interesting center at the mandelbrot for our zoom
+        const float2 CENTER = float2(0.675, 0.46);    // an interesting center at the mandelbrot for our zoom
         const float ZOOM    = 0.033 * UI_GravityRNG;                         // smaller numbers increase zoom
         const float AR      = ReShade::ScreenSize.x / ReShade::ScreenSize.y; // format to screenspace
         float2 z, c;
@@ -425,7 +439,7 @@ namespace COBRA_GRV
     technique TECH_PreGravity <
         hidden     = true;
         enabled    = true;
-        timeout    = 1000;
+        timeout    = 1;
     >
     {
         pass GenerateRNG
@@ -453,18 +467,18 @@ namespace COBRA_GRV
     }
 
     technique TECH_Gravity <
-        ui_label     = "Gravity";
-        ui_tooltip   = "------About-------\n"
-                       "Gravity.fx lets pixels gravitate towards the bottom of the screen in the game's 3D environment.\n"
-                       "You can filter the affected pixels by depth and by color.\n"
-                       "It uses a custom seed (currently the Mandelbrot set) to determine the intensity of each pixel.\n"
-                       "Make sure to also test out the texture-RNG variant with the picture 'gravityrng.png' provided\n"
-                       "in the Textures folder. You can replace the texture with your own picture, as long as it\n"
-                       "is 1920x1080, RGBA8 and has the same name. Only the red-intensity is taken. So either use red\n"
-                       "images or greyscale images.\n"
-                       "The effect is quite resource consuming. On large resolutions, check out Gravity_CS.fx instead.\n\n"
-                       "Version:    " COBRA_GRV_VERSION "\nAuthor:     SirCobra\nCollection: CobraFX\n"
-                       "            https://github.com/LordKobra/CobraFX";
+        ui_label   = "Gravity";
+        ui_tooltip = "------About-------\n"
+                     "Gravity.fx lets pixels gravitate towards the bottom of the screen in the game's 3D environment.\n"
+                     "You can filter the affected pixels by depth and by color.\n"
+                     "It uses a custom seed (currently the Mandelbrot set) to determine the intensity of each pixel.\n"
+                     "Make sure to also test out the texture-RNG variant with the picture 'gravityrng.png' provided\n"
+                     "in the Textures folder. You can replace the texture with your own picture, as long as it\n"
+                     "is 1920x1080, RGBA8 and has the same name. Only the red-intensity is taken. So either use red\n"
+                     "images or greyscale images.\n"
+                     "The effect is quite resource consuming. On large resolutions, check out Gravity_CS.fx instead.\n\n"
+                     "Version:    " COBRA_GRV_VERSION "\nAuthor:     SirCobra\nCollection: CobraFX\n"
+                     "            https://github.com/LordKobra/CobraFX";
     >
     {
         pass GenerateRNG

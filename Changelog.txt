@@ -1,4 +1,17 @@
+Repository
+
+                2025-06-28
+                - added MIT license
+                - added Greyscale.fx
+
 CobraMask.fx
+
+        0.4.0   2025-06-28
+                - now depends on CobraUtility.fxh v0.3.0
+                - added linear rgb and HDR support
+                - preserves backbuffer alpha
+                - slight performance improvements
+
         0.3.0   2023-11-23
                 - added opacity slider
 
@@ -19,6 +32,15 @@ CobraMask.fx
                 - hsv2rgb function changed
 
 CobraUtility.fxh
+
+        0.3.0   2025-06-28
+                - added basic HDR support
+                - reworked 3D math
+                - reworked mask color selection from HSV to OKLCh
+                - added color space conversions and encoding functions
+                - added dithering and interleaved gradient noise
+                - added vertex and pixel shader for clearing operation
+
         0.2.1   2023-12-20
                 - added brightness support
 
@@ -32,6 +54,13 @@ CobraUtility.fxh
                 - has a basic function compendium
 
 ColorSort_CS.fx
+
+        0.7.0   2025-06-28
+                - now depends on CobraUtility.fxh v0.3.0
+                - added linear rgb and HDR support
+                - now sorts correctly by luminance
+                - slight performance improvements
+
         0.6.0   2023-12-20
                 - now depends on CobraUtility.fxh v0.2.1
                 - performance improvements (up to 2.5x speed)
@@ -52,7 +81,8 @@ ColorSort_CS.fx
                 - renamed texture "colorsort_noise.png" to "uniform_noise.png"
                 - fixed bug causing effect to crash if "NoDebugInfo=1" was set in the ReShade.ini
 
-Droste.fx        
+Droste.fx
+
         0.4.3   2023-11-22
                 - now depends on CobraUtility.fxh v0.2.0
 
@@ -68,6 +98,13 @@ Droste.fx
                         - automatic aspect-ratio adjustment
 
 Frequency_CS.fx
+
+        0.2.0   2025-06-28
+                - now depends on CobraUtility.fxh v0.3.0
+                - added linear rgb and HDR support
+                - now correctly calculates luminance
+                - preserves backbuffer alpha
+
         0.1.1   2023-11-29
                 - performance improvements
                 - improved decay option
@@ -76,6 +113,7 @@ Frequency_CS.fx
                 - added to the repository
 
 Gravity.fx
+
         0.2.2   2023-11-20
                 - changed noise texture name
 
@@ -84,6 +122,13 @@ Gravity.fx
                 - improved tooltips
 
 Gravity_CS.fx
+
+        0.4.0   2025-06-28
+                - now depends on CobraUtility.fxh v0.3.0
+                - now correctly works in linear rgb and HDR
+                - color filter reworked from HSV to OKLCh
+                - timeout improved
+
         0.3.2   2023-11-25
                 - situational performance improvements (up to 2x speed)
                 - requirements updated
@@ -109,7 +154,21 @@ Gravity_CS.fx
                 - renamed from "computeGravity.fx" to "Gravity_CS.fx" (can break presets too)
                 - fixed bug causing effect to disappear when tint-intensity was set to 0
 
+Greyscale.fx
+
+        0.1.0
+                2025-06-28
+                - added to the repository
+                - depends on CobraUtility.fxh v0.3.0
+
 RealLongExposure.fx
+
+        0.6.0   2025-06-28
+                - now depends on CobraUtility.fxh v0.3.0
+                - now correctly works in linear rgb and HDR
+                - implemented dither to remove banding artifacts from accumulation texture
+                - preserves backbuffer alpha
+
         0.5.4   2024-01-06
                 - fixed bug causing effect to not work on large resolutions
 
@@ -135,6 +194,11 @@ RealLongExposure.fx
                 - fixed ReShade 5.0 compability
 
 Outdated shaders (LongExposure.fx)
+
+        0.2.0   2025-06-28
+                - now depends on CobraUtility.fxh v0.3.0
+                - now correctly works in linear rgb and HDR
+                - preserves backbuffer alpha
 
         0.1.1   2023-11-08
                 - huge code reformatting (can break presets)
