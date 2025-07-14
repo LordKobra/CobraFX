@@ -75,7 +75,7 @@ This shader works the following way: In the effect window, you put "Cobra Mask: 
 
 ## Greyscale
 
-**Greyscale.fx** allows to transform the image into greyscale. You can chose from popular metrics whether to preserve lightness or perceived luminance.
+**Greyscale.fx** allows to transform the color image into greyscale. You can chose from popular metrics whether to preserve lightness or perceived luminance.
 
 <p align="center"><img src="https://images.steamusercontent.com/ugc/9738225414391796124/CC92F36240D8EC221C1CFBD4B9C6C0F23315DE74/?imw=5000&imh=5000&ima=fit&impolicy=Letterbox&imcolor=%23000000&letterbox=false">
 <i>Greyscale in action</i></p>
