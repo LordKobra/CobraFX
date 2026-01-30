@@ -1,6 +1,6 @@
 ////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Gravity CS (Gravity_CS.fx) by SirCobra
-// Version 0.4.0
+// Version 0.4.1
 // You can find info and all my shaders here: https://github.com/LordKobra/CobraFX
 //
 // --------Description---------
@@ -38,7 +38,7 @@ namespace COBRA_XGRV
 
     // Defines
 
-    #define COBRA_XGRV_VERSION "0.4.0"
+    #define COBRA_XGRV_VERSION "0.4.1"
 
     #define COBRA_UTL_MODE 0
     #include ".\CobraUtility.fxh"
@@ -51,11 +51,14 @@ namespace COBRA_XGRV
         #define GRAVITY_HEIGHT 1080
     #endif
 
-    #define COBRA_MIN(a, b) (int((a) < (b)) * (a) + int((b) <= (a)) * (b))
-    #define COBRA_XGRV_HEIGHT COBRA_MIN(GRAVITY_HEIGHT, 2000)
+    //precompile-time evaluated min and max //@TODO move to utility
+    #define COBRA_UTL_MIN(a, b) (int((a) < (b)) * (a) + int((b) <= (a)) * (b))
+    #define COBRA_UTL_MAX(a, b) (int((a) > (b)) * (a) + int((b) >= (a)) * (b))
+    #define COBRA_XGRV_HEIGHT COBRA_UTL_MIN(GRAVITY_HEIGHT, 2000)
+    #define COBRA_XGRV_MAX_WIDTH COBRA_UTL_MAX(BUFFER_HEIGHT, BUFFER_WIDTH)
     #define COBRA_XGRV_RES_Y (float(BUFFER_HEIGHT) / COBRA_XGRV_HEIGHT)
     #define COBRA_XGRV_RES_X 1
-    #define GRAVITY_WIDTH (float(BUFFER_WIDTH) / COBRA_XGRV_RES_X)
+    #define GRAVITY_WIDTH (float(COBRA_XGRV_MAX_WIDTH) / COBRA_XGRV_RES_X)
     #define COBRA_XGRV_WORKLOAD 8
     #define COBRA_XGRV_THREADS ROUNDUP(COBRA_XGRV_HEIGHT, COBRA_XGRV_WORKLOAD)
     #define COBRA_XGRV_MEMORY_HEIGHT (COBRA_XGRV_THREADS * COBRA_XGRV_WORKLOAD)
@@ -99,6 +102,14 @@ namespace COBRA_XGRV
                        "You can change the image for your own RNG as long as the name and resolution stay the same.";
         ui_category  = COBRA_UTL_UI_GENERAL;
     >                = true;
+
+    uniform uint UI_RotationType <
+        ui_label     = " Direction";
+        ui_type      = "combo";
+        ui_items     = "Vertical\0Horizontal\0";
+        ui_tooltip   = "The direction of gravitation.";
+        ui_category  = COBRA_UTL_UI_GENERAL;
+    >                = 0;
 
     uniform bool UI_InvertGravity <
         ui_label     = " Invert Gravity";
@@ -182,7 +193,7 @@ namespace COBRA_XGRV
     uniform int UI_BufferEnd <
         ui_type     = "radio";
         ui_spacing  = 2;
-        ui_text     = " Preprocessor Options:\n * GRAVITY_HEIGHT (default value: 1024) defines the "
+        ui_text     = " Preprocessor Options:\n * GRAVITY_HEIGHT (default value: 1080) defines the "
                       "resolution of the effect along the gravitational axis. The value needs to be integer. "
                       "Smaller values give performance at cost of visual fidelity. 768: Performance 1080: HD Quality. "
                       "Set it to 'BUFFER_HEIGHT' if you always want to run the effect at native resolution.\n\n"
@@ -315,16 +326,24 @@ namespace COBRA_XGRV
     //
     ////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-    void CS_Gravity(uint3 id : SV_DispatchThreadID, uint3 tid : SV_GroupThreadID, uint gi : SV_GroupIndex)
+    void CS_Gravity(uint3 id : SV_DispatchThreadID, uint3 tid : SV_GroupThreadID, uint3 gid : SV_GroupID)
     {
         uint max_strength = 0;
         if(tid.y == 0) 
             max_str = 0;
 
+        const uint CURRENT_WIDTH   = BUFFER_WIDTH * (1 - UI_RotationType) + BUFFER_HEIGHT * UI_RotationType;
+        const uint CURRENT_HEIGHT  = BUFFER_HEIGHT * (1 - UI_RotationType) + BUFFER_WIDTH * UI_RotationType;
+        const float CURRENT_RES_Y  = (float(CURRENT_HEIGHT) / COBRA_XGRV_HEIGHT);
+
+        // throw away threadgroups out of range
+        if(gid.x >= CURRENT_WIDTH)
+            return;
+
         barrier();
         uint start        = tid.y * COBRA_XGRV_WORKLOAD;
-        uint finish       = -1 + COBRA_XGRV_WORKLOAD;
-        float x_norm      = (round(id.x * COBRA_XGRV_RES_X) + 0.5) / BUFFER_WIDTH;
+        const uint FINISH = -1 + COBRA_XGRV_WORKLOAD;
+        float x_norm      = (round(id.x * COBRA_XGRV_RES_X) + 0.5) / CURRENT_WIDTH;
         // At resolutions below 1920x1080 the texture will be too small for hotsampling mode and it looks off
         // The thread write interval distribution function: We have O(n*n) total required writes split equally
         const uint F   = COBRA_XGRV_HEIGHT * COBRA_XGRV_WORKLOAD;
@@ -332,16 +351,30 @@ namespace COBRA_XGRV
         uint fi_finish = UI_AllowOverlapping ? COBRA_XGRV_HEIGHT - 1 : round(sqrt((tid.y + 1) * F)) - 1;
 
         // populate arrays
-        [unroll] for (uint yz = 0; yz <= finish; yz++)
+        [unroll] for (uint yz = 0; yz <= FINISH; yz++)
         {
             uint y        = yz + start;
             uint yi       = y + (COBRA_XGRV_HEIGHT - 1 - 2 * y) * UI_InvertGravity;
+            // @rotation
+            float x_depth = x_norm * (1 - UI_RotationType) 
+                            + ((round(yi * CURRENT_RES_Y) + 0.5) / CURRENT_HEIGHT) * UI_RotationType;
+            float y_depth = ((round(yi * CURRENT_RES_Y) + 0.5) / CURRENT_HEIGHT) * (1 - UI_RotationType) 
+                            + x_norm * UI_RotationType;
+
+            float x_focus = x_norm * (1 - UI_RotationType) 
+                            + ((round(y * CURRENT_RES_Y) + 0.5) / CURRENT_HEIGHT) * UI_RotationType;
+            float y_focus = ((round(y * CURRENT_RES_Y) + 0.5) / CURRENT_HEIGHT) * (1 - UI_RotationType) 
+                            + x_norm * UI_RotationType;
+
+            float x_color = (id.x * COBRA_XGRV_RES_X) * (1 - UI_RotationType) + (yi * CURRENT_RES_Y) * UI_RotationType;
+            float y_color = (yi * CURRENT_RES_Y) * (1 - UI_RotationType) + (id.x * COBRA_XGRV_RES_X) * UI_RotationType;
+
             final_list[y] = y;
-            depth_list[y] = depth_listU[y] = ReShade::GetLinearizedDepth(float2(x_norm, (round(yi * COBRA_XGRV_RES_Y) + 0.5) / BUFFER_HEIGHT));
-            float3 rgb                     = tex2Dfetch(ReShade::BackBuffer, int2(id.x * COBRA_XGRV_RES_X, yi * COBRA_XGRV_RES_Y)).rgb;
+            depth_list[y] = depth_listU[y] = ReShade::GetLinearizedDepth(float2(x_depth, y_depth)); //@rotation
+            float3 rgb                     = tex2Dfetch(ReShade::BackBuffer, int2(x_color, y_color)).rgb; //@rotation
             rgb                            = enc_to_lin(rgb);
-            float strength                 = tex2Dfetch(SAM_GravitySeedMap, int2(id.x, yi)).r;
-            strength     *= check_focus(rgb, depth_list[y], float2(x_norm, (round(y * COBRA_XGRV_RES_Y) + 0.5) / BUFFER_HEIGHT));
+            float strength                 = tex2Dfetch(SAM_GravitySeedMap, int2(id.x, yi)).r; // no rotated access needed, right?
+            strength     *= check_focus(rgb, depth_list[y], float2(x_focus, y_focus)); // @rotation
             strengthen[y] = strength * UI_GravityIntensity * (COBRA_XGRV_HEIGHT - 2.0);
             max_strength = max(max_strength, strengthen[y]);
         }
@@ -414,14 +447,18 @@ namespace COBRA_XGRV
         float4 store_val        = 1.0;
         // store result in the buffer
         //[unroll] 
-        for (uint yy = 0; yy <= finish; yy++)
+        for (uint yy = 0; yy <= FINISH; yy++)
         {
             uint y  = yy + start;
             uint fi = final_list[y] + (COBRA_XGRV_HEIGHT - 1 - 2 * final_list[y]) * UI_InvertGravity;
             uint yi = y + (COBRA_XGRV_HEIGHT - 1 - 2 * y) * UI_InvertGravity;
+
+            // @rotation
+            uint x_color = id.x * (1 - UI_RotationType) + (fi * CURRENT_RES_Y) * UI_RotationType;
+            uint y_color = (fi * CURRENT_RES_Y) * (1 - UI_RotationType) + id.x * UI_RotationType;
             if (y != final_list[y])
             {
-                store_val.rgb         = tex2Dfetch(ReShade::BackBuffer, int2(id.x, fi * COBRA_XGRV_RES_Y)).rgb; // access
+                store_val.rgb         = tex2Dfetch(ReShade::BackBuffer, int2(x_color, y_color)).rgb; // rotated access
                 store_val.rgb         = enc_to_lin(store_val.rgb);
                 float blend_intensity = smoothstep(0.0, strengthen[final_list[y]], distance(y, final_list[y]));
                 float3 source_oklab   = csp_to_oklab(store_val.rgb);
@@ -430,7 +467,7 @@ namespace COBRA_XGRV
                 target_oklab          = lerp(source_oklab, target_oklab, blend_intensity * UI_BlendIntensity); //@BlendOp
                 store_val.rgb         = oklab_to_csp(target_oklab);
                 store_val.rgb         = lin_to_enc(store_val.rgb);
-                tex2Dstore(STOR_GravityMain, float2(id.x, yi), store_val);
+                tex2Dstore(STOR_GravityMain, float2(id.x, yi), store_val); // store rotated
             }
         }
     }
@@ -493,7 +530,13 @@ namespace COBRA_XGRV
     // Write to the backbuffer
     void PS_PrintGravity(float4 vpos : SV_Position, float2 texcoord : TEXCOORD, out float4 fragment : SV_Target)
     {
-        fragment               = tex2D(SAM_GravityMain, texcoord);
+        //@rotation
+        const uint CURRENT_WIDTH  = BUFFER_WIDTH * (1 - UI_RotationType) + BUFFER_HEIGHT * UI_RotationType;
+        float2 current_texcoord   = texcoord * (1 - UI_RotationType)
+                                    + texcoord.yx * UI_RotationType;
+        current_texcoord         *= float2(float(CURRENT_WIDTH) / GRAVITY_WIDTH, 1.0);
+        fragment                  = tex2D(SAM_GravityMain, current_texcoord);
+
         fragment.rgb           = enc_to_lin(fragment.rgb);
         float depth            = ReShade::GetLinearizedDepth(texcoord);
         float3 color           = tex2Dfetch(ReShade::BackBuffer, floor(vpos.xy)).rgb;
@@ -583,3 +626,19 @@ namespace COBRA_XGRV
 
     #endif // Shader End
 }
+
+
+/* 
+Rotation without recompilation:
+* Overextend GRAVITY_WIDTH to max(height,width) -> throw away threadgroups potentially longer
+        -> Problem: gravity texture is optimized towards a truncated height dimension
+            -> overextend texture
+        -> Problem: BUFFER_HEIGHT + COBRA_XGRV_RES_Y is dependent on buffer height 
+            -> replace with current_height
+        -> Problem: TEX_GravityMain needs to be written to not rotated fashion 
+            -> only during write 1x
+        -> Problem: TEX_GravityMain can be larger in rotated fashion 
+           IMPORTANT: needs fix for both x and y (we dont know in advance which AR) 
+            -> only 1x during read
+*/
+

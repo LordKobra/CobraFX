@@ -126,6 +126,9 @@ Gravity.fx
 
 Gravity_CS.fx
 
+        0.4.1   2026-01-30
+                - added vertical rotation option
+
         0.4.0   2025-06-28
                 - now depends on CobraUtility.fxh v0.3.0
                 - now correctly works in linear rgb and HDR
